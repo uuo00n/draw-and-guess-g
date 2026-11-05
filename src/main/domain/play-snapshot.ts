@@ -197,7 +197,11 @@ export function loadPlaySnapshot(
     canPause: !lock && phase === 'running',
     canResume: !lock && phase === 'paused',
     canUndo,
-    syncKey: `${turn?.id ?? 'none'}:${turn?.status ?? 'none'}`,
+    canResetTimer: !lock && turn?.status === 'TURN_PAUSED',
+    syncKey:
+      turn?.status === 'TURN_RUNNING'
+        ? `${turn.id}:running`
+        : `${turn?.id ?? 'none'}:${turn?.status ?? 'none'}:${turn?.remaining_ms ?? 0}`,
     unusedCount
   }
 }

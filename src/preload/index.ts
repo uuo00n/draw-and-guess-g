@@ -85,6 +85,10 @@ const gameAPI = {
       invoke('games:resume', gameCommandInputSchema.parse(input)).then((raw) =>
         gameCommandResultSchema.parse(raw)
       ),
+    resetTurnTimer: (input: GameCommandInput): Promise<GameCommandResult> =>
+      invoke('games:resetTurnTimer', gameCommandInputSchema.parse(input)).then((raw) =>
+        gameCommandResultSchema.parse(raw)
+      ),
     undoLastAnswer: (input: GameCommandInput): Promise<GameCommandResult> =>
       invoke('games:undo', gameCommandInputSchema.parse(input)).then((raw) =>
         gameCommandResultSchema.parse(raw)

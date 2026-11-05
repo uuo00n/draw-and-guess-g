@@ -24,6 +24,7 @@ import {
   getPlaySnapshot,
   listGameSummaries,
   pauseTurn,
+  resetTurnTimer,
   resumeTurn,
   startTurn,
   submitAnswer,
@@ -146,6 +147,10 @@ export function registerGameHandlers(db: AppDatabase, options: { dataDir: string
 
   ipcMain.handle('games:resume', (_event, raw: unknown) =>
     settle(resumeTurn(db, gameCommandInputSchema.parse(raw), { timer: timerEngine }))
+  )
+
+  ipcMain.handle('games:resetTurnTimer', (_event, raw: unknown) =>
+    settle(resetTurnTimer(db, gameCommandInputSchema.parse(raw), { timer: timerEngine }))
   )
 
   ipcMain.handle('games:undo', (_event, raw: unknown) =>

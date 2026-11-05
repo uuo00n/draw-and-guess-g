@@ -1,13 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { motion, useReducedMotion } from 'motion/react'
 import type { GameCommandResult, PlaySnapshot } from '@shared/schemas/play'
 import { GenpactBrand } from '@renderer/components/branding/GenpactBrand'
 import { ScrollablePageRoot } from '@renderer/components/layout/AppShell'
 import { TeamScoreStrip } from '@renderer/components/TeamScoreStrip'
 import { CountdownRing } from '@renderer/components/CountdownRing'
+import { TurnReadyCountdown } from '@renderer/components/TurnReadyCountdown'
 import { ScoreValue } from '@renderer/components/ScoreValue'
 import { Button } from '@renderer/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@renderer/components/ui/dialog'
 import { StatusNote } from '@renderer/components/ui/status-note'
 import { useGameSnapshot } from '@renderer/hooks/useGameSnapshot'
 import { useTurnClock } from '@renderer/hooks/useTurnClock'
@@ -25,17 +33,17 @@ export function GameSessionPage(): React.JSX.Element {
   const { snapshot, error, setSnapshot, setError } = useGameSnapshot(gameId)
   const [pending, setPending] = useState(false)
   const [abortArmed, setAbortArmed] = useState(false)
+  const [startCountdown, setStartCountdown] = useState(false)
+  const [resetTimerConfirmOpen, setResetTimerConfirmOpen] = useState(false)
   const displayRemainingMs = useTurnClock({
     turnId: snapshot?.currentTurn?.id ?? null,
     status: snapshot?.currentTurn?.status ?? null,
     authoritativeRemainingMs: snapshot?.currentTurn?.remainingMs ?? 0
   })
   const { championMark } = useSessionEffects(snapshot, displayRemainingMs)
-  const reducedMotion = useReducedMotion()
-  const effectLevel = useUiSettings((state) => state.effectLevel)
   const muted = useUiSettings((state) => state.muted)
   const setMuted = useUiSettings((state) => state.setMuted)
-  const motionOn = !reducedMotion && effectLevel !== 'off'
+  const startTurnAfterCountdown = useRef<(() => void) | null>(null)
 
   const run = async (action: () => Promise<GameCommandResult>): Promise<void> => {
     if (pending) return
@@ -94,6 +102,10 @@ export function GameSessionPage(): React.JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [snapshot, gameId, pending])
 
+  useEffect(() => {
+    if (!snapshot?.canResetTimer) setResetTimerConfirmOpen(false)
+  }, [snapshot?.canResetTimer])
+
   if (!snapshot) {
     return <div className="app-shell session-shell text-first-03">{error ?? '正在读取比赛…'}</div>
   }
@@ -101,6 +113,10 @@ export function GameSessionPage(): React.JSX.Element {
   const roundLabel = snapshot.currentTurn
     ? `第 ${snapshot.currentTurn.roundNo} / ${snapshot.roundCount} 轮`
     : `共 ${snapshot.roundCount} 轮`
+
+  startTurnAfterCountdown.current = (): void => {
+    void run(() => window.gameAPI.games.startTurn({ gameId, commandId: newCommandId() }))
+  }
 
   return (
     <ScrollablePageRoot
@@ -146,15 +162,41 @@ export function GameSessionPage(): React.JSX.Element {
         </>
       }
     >
-      <motion.section
-        key={`${snapshot.phase}:${snapshot.currentTurn?.id ?? 'none'}:${snapshot.currentQuestion?.queueItemId ?? 'none'}`}
-        className="mt-4 flex min-h-0 flex-1 flex-col"
-        initial={motionOn ? { opacity: 0, y: 8 } : false}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.18 }}
-      >
-        {renderPhase(snapshot)}
-      </motion.section>
+      <section className="mt-4 flex min-h-0 flex-1 flex-col">{renderPhase(snapshot)}</section>
+      <TurnReadyCountdown
+        active={startCountdown}
+        onCancel={() => setStartCountdown(false)}
+        onComplete={() => {
+          setStartCountdown(false)
+          startTurnAfterCountdown.current?.()
+        }}
+      />
+      <Dialog open={resetTimerConfirmOpen} onOpenChange={setResetTimerConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确定要重置时间吗？</DialogTitle>
+            <DialogDescription>
+              将把 {snapshot.currentTurn?.teamName ?? '当前组'} 的剩余时间恢复为本场挑战的完整时长。
+              已答题目与得分不会回退。确定要继续吗？
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="secondary" disabled={pending} onClick={() => setResetTimerConfirmOpen(false)}>
+              取消
+            </Button>
+            <Button
+              disabled={pending}
+              onClick={() =>
+                void run(() =>
+                  window.gameAPI.games.resetTurnTimer({ gameId, commandId: newCommandId() })
+                ).then(() => setResetTimerConfirmOpen(false))
+              }
+            >
+              确认重置时间
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ScrollablePageRoot>
   )
 
@@ -260,10 +302,8 @@ export function GameSessionPage(): React.JSX.Element {
           <Button
             size="lg"
             className="mt-8"
-            disabled={!current.canStart || pending}
-            onClick={() =>
-              void run(() => window.gameAPI.games.startTurn({ gameId, commandId: newCommandId() }))
-            }
+            disabled={!current.canStart || pending || startCountdown}
+            onClick={() => setStartCountdown(true)}
           >
             开始 {seconds} 秒挑战
           </Button>
@@ -277,11 +317,10 @@ export function GameSessionPage(): React.JSX.Element {
         <div className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center text-center">
           <h2 className="text-4xl font-semibold">{turn?.teamName} 本队结束</h2>
           <p className="mt-4 text-first-03">倒计时已停止。下一队需要主持人手动开始。</p>
-          <div className="mt-6 grid w-full grid-cols-2 gap-3 text-left md:grid-cols-4">
+          <div className="mt-6 grid w-full grid-cols-3 gap-3 text-left">
             <Stat label="得分" value={turn?.turnScore ?? 0} />
             <Stat label="答对" value={turn?.correctCount ?? 0} />
             <Stat label="跳过" value={turn?.skipCount ?? 0} />
-            <Stat label="超时" value={turn?.timeoutCount ?? 0} />
           </div>
           {current.canAdvance ? (
             <Button
@@ -373,6 +412,16 @@ export function GameSessionPage(): React.JSX.Element {
               }
             >
               继续
+            </Button>
+          ) : null}
+          {current.canResetTimer ? (
+            <Button
+              size="lg"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => setResetTimerConfirmOpen(true)}
+            >
+              重新计时本组
             </Button>
           ) : null}
           <Button

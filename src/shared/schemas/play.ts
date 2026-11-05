@@ -60,6 +60,7 @@ export const playSnapshotSchema = gameSnapshotSchema.extend({
   canPause: z.boolean(),
   canResume: z.boolean(),
   canUndo: z.boolean(),
+  canResetTimer: z.boolean(),
   syncKey: z.string(),
   unusedCount: z.number().int()
 })

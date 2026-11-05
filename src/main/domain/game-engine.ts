@@ -637,6 +637,34 @@ export function resumeTurn(
   })
 }
 
+export function resetTurnTimer(
+  db: Database.Database,
+  input: GameCommandInput,
+  options?: EngineOptions
+): CommandCore {
+  const timer = clock(options)
+  const now = nowMs(options)
+  return immediate(db, () => {
+    const receipt = readReceipt(db, input.commandId)
+    if (receipt) return duplicate(db, input.gameId, receipt, timer, now)
+    assertHealthy(db, input.gameId, timer)
+    const game = loadGameRow(db, input.gameId)
+    requireMutableGame(game)
+    const turn = resolveTurn(db, game)
+    if (!turn || turn.status !== 'TURN_PAUSED') {
+      throw new GameCommandError('请先暂停后再重新计时', 'INVALID_STATE')
+    }
+    db.prepare(`UPDATE game_turns SET remaining_ms = ? WHERE id = ?`).run(
+      game.turn_duration_ms,
+      turn.id
+    )
+    timer.disarm(input.gameId)
+    const eventId = randomUUID()
+    writeReceipt(db, { commandId: input.commandId, gameId: input.gameId, eventId, applied: true })
+    return resultOf(db, input.gameId, timer, now, true, eventId)
+  })
+}
+
 export function undoLastAnswer(
   db: Database.Database,
   input: GameCommandInput,

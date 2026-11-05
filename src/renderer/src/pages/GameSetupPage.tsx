@@ -12,6 +12,11 @@ import {
   TURN_DURATION_SEC_MIN,
   TURN_DURATION_SEC_STEP
 } from '@shared/constants'
+import {
+  formatMissingPerformerMessage,
+  groupsMissingPerformer
+} from '@shared/roster-performers'
+import { normalizeMemberName } from '@shared/normalize'
 import { PageShell, StatPill } from '@renderer/components/layout/AppShell'
 import { RosterPanels } from '@renderer/components/roster/RosterPanels'
 import { Button } from '@renderer/components/ui/button'
@@ -219,6 +224,22 @@ export function GameSetupPage(): React.JSX.Element {
     return null
   }
 
+  const performerAudit = useMemo(() => {
+    if (!roster) return []
+    const performers = new Set(store.performerMembers.map((name) => normalizeMemberName(name)))
+    return [...roster.groups]
+      .sort((a, b) => a.group - b.group)
+      .map((group) => {
+        const performer =
+          group.members.find((member) => performers.has(normalizeMemberName(member))) ?? null
+        return { groupNo: group.group, performer }
+      })
+  }, [roster, store.performerMembers])
+
+  const missingPerformerGroups = roster
+    ? groupsMissingPerformer(roster, store.performerMembers)
+    : []
+
   const openConfirm = (): void => {
     setError(null)
     const message = validateBeforeConfirm()
@@ -377,18 +398,40 @@ export function GameSetupPage(): React.JSX.Element {
           }}
         >
           <DialogHeader>
-            <DialogTitle>创建这场比赛？</DialogTitle>
+            <DialogTitle>审核表演题目人员</DialogTitle>
             <DialogDescription>
               {groupCount} 组 × {store.roundCount} 轮 = {challengeCount} 场挑战，每场{' '}
-              {store.turnDurationSec} 秒。创建后队伍与题目队列不能修改。
+              {store.turnDurationSec} 秒。请确认每组都已勾选表演题目人员后再冻结队列。
             </DialogDescription>
           </DialogHeader>
+          <ul className="max-h-64 space-y-2 overflow-y-auto rounded-[12px] border border-line bg-surface p-3 text-sm">
+            {performerAudit.map((row) => {
+              const missing = missingPerformerGroups.includes(row.groupNo)
+              return (
+                <li
+                  key={row.groupNo}
+                  className={missing ? 'text-coral' : 'text-first-03'}
+                >
+                  {groupDisplayName(row.groupNo)}：
+                  {row.performer ? `${row.performer}（表演题目）` : '未勾选'}
+                </li>
+              )
+            })}
+          </ul>
+          {missingPerformerGroups.length > 0 ? (
+            <StatusNote tone="danger">
+              {formatMissingPerformerMessage(roster!, missingPerformerGroups)}
+            </StatusNote>
+          ) : null}
           <DialogFooter>
             <Button variant="secondary" disabled={creating} onClick={() => setConfirmOpen(false)}>
-              取消
+              返回修改
             </Button>
-            <Button disabled={creating} onClick={() => void runCreate()}>
-              {creating ? '正在创建…' : '创建'}
+            <Button
+              disabled={creating || missingPerformerGroups.length > 0}
+              onClick={() => void runCreate()}
+            >
+              {creating ? '正在创建…' : '确认创建'}
             </Button>
           </DialogFooter>
         </DialogContent>

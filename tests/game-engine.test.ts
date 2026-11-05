@@ -15,6 +15,7 @@ import {
   getPlaySnapshot,
   pauseTurn,
   recoverDatabase,
+  resetTurnTimer,
   resumeTurn,
   settleTimeout,
   startTurn,
@@ -500,6 +501,22 @@ describe('game core loop', () => {
     expect(() =>
       undoLastAnswer(db, { gameId: timed.id, commandId: randomUUID() }, { timer: timedTimer, now: t0 + DURATION })
     ).toThrow(/不能撤销/)
+  })
+
+  it('resets paused turn timer back to full challenge duration', () => {
+    const db = openMemoryDatabase()
+    const timer = new TimerEngine()
+    const game = seed(db, ['A', 'B', 'C'])
+    const t0 = 12_000_000
+    startTurn(db, { gameId: game.id, commandId: randomUUID() }, { timer, now: t0 })
+    pauseTurn(db, { gameId: game.id, commandId: randomUUID() }, { timer, now: t0 + 15_000 })
+    const paused = getPlaySnapshot(db, game.id, { timer, now: t0 + 15_000 })
+    expect(paused.currentTurn!.remainingMs).toBeLessThan(DURATION)
+
+    resetTurnTimer(db, { gameId: game.id, commandId: randomUUID() }, { timer, now: t0 + 16_000 })
+    const reset = getPlaySnapshot(db, game.id, { timer, now: t0 + 16_000 })
+    expect(reset.currentTurn!.remainingMs).toBe(DURATION)
+    expect(reset.canResetTimer).toBe(true)
   })
 
   it('assigns each normalized question at most once across teams', () => {
