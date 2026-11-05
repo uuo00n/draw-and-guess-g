@@ -1,7 +1,8 @@
 import Database from 'better-sqlite3'
 import { MIGRATION_V1 } from './migrations/001_initial'
+import { MIGRATION_V2 } from './migrations/002_command_receipts'
 
-const CURRENT_VERSION = 1
+const CURRENT_VERSION = 2
 
 export type AppDatabase = Database.Database
 
@@ -25,17 +26,22 @@ export function migrate(db: AppDatabase): void {
     | { version: number | null }
     | undefined
   const current = row?.version ?? 0
-  if (current >= CURRENT_VERSION) {
-    return
+  const now = new Date().toISOString()
+  if (current < 1) {
+    db.transaction(() => {
+      db.exec(MIGRATION_V1)
+      db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?)').run(now)
+    })()
   }
-
-  db.transaction(() => {
-    db.exec(MIGRATION_V1)
-    db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
-      CURRENT_VERSION,
-      new Date().toISOString()
-    )
-  })()
+  if (current < CURRENT_VERSION) {
+    db.transaction(() => {
+      db.exec(MIGRATION_V2)
+      db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
+        CURRENT_VERSION,
+        now
+      )
+    })()
+  }
 }
 
 export function openMemoryDatabase(): AppDatabase {

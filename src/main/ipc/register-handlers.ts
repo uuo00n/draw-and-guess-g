@@ -1,10 +1,28 @@
 import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { app, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import type { AppDatabase } from '../database/connection'
 import { createGameInputSchema } from '../../shared/schemas/games'
 import { exportBankInputSchema, questionQuerySchema } from '../../shared/schemas/questions'
-import { createGame, loadGameSnapshot } from '../domain/game-create'
+import {
+  abortGameInputSchema,
+  gameCommandInputSchema,
+  submitAnswerInputSchema,
+  type GameUiEvent
+} from '../../shared/schemas/play'
+import { createGame } from '../domain/game-create'
+import {
+  abortGame,
+  advanceToNextTeam,
+  getPlaySnapshot,
+  listGameSummaries,
+  pauseTurn,
+  resumeTurn,
+  startTurn,
+  submitAnswer,
+  undoLastAnswer
+} from '../domain/game-engine'
+import { timerEngine } from '../domain/timer-engine'
 import {
   buildTemplateWorkbook,
   exportBankWorkbook
@@ -79,17 +97,59 @@ export function registerQuestionHandlers(db: AppDatabase): void {
   })
 }
 
+function publish(uiEvent: GameUiEvent | undefined): void {
+  if (!uiEvent) return
+  for (const win of BrowserWindow.getAllWindows()) {
+    win.webContents.send('game:ui-event', uiEvent)
+  }
+}
+
+function settle<T extends { uiEvent?: GameUiEvent }>(result: T): Omit<T, 'uiEvent'> {
+  publish(result.uiEvent)
+  const { uiEvent: _uiEvent, ...rest } = result
+  return rest
+}
+
 export function registerGameHandlers(db: AppDatabase): void {
   ipcMain.handle('games:create', (_event, raw: unknown) => {
     const input = createGameInputSchema.parse(raw)
-    const snapshot = createGame(db, input)
-    return snapshot
+    return createGame(db, input)
   })
 
   ipcMain.handle('games:get', (_event, gameId: unknown) => {
     if (typeof gameId !== 'string') throw new Error('gameId must be string')
-    return loadGameSnapshot(db, gameId)
+    return getPlaySnapshot(db, gameId, { timer: timerEngine })
   })
+
+  ipcMain.handle('games:list', () => listGameSummaries(db, timerEngine))
+
+  ipcMain.handle('games:startTurn', (_event, raw: unknown) =>
+    settle(startTurn(db, gameCommandInputSchema.parse(raw), { timer: timerEngine }))
+  )
+
+  ipcMain.handle('games:submitAnswer', (_event, raw: unknown) =>
+    settle(submitAnswer(db, submitAnswerInputSchema.parse(raw), { timer: timerEngine }))
+  )
+
+  ipcMain.handle('games:pause', (_event, raw: unknown) =>
+    settle(pauseTurn(db, gameCommandInputSchema.parse(raw), { timer: timerEngine }))
+  )
+
+  ipcMain.handle('games:resume', (_event, raw: unknown) =>
+    settle(resumeTurn(db, gameCommandInputSchema.parse(raw), { timer: timerEngine }))
+  )
+
+  ipcMain.handle('games:undo', (_event, raw: unknown) =>
+    settle(undoLastAnswer(db, gameCommandInputSchema.parse(raw), { timer: timerEngine }))
+  )
+
+  ipcMain.handle('games:advance', (_event, raw: unknown) =>
+    settle(advanceToNextTeam(db, gameCommandInputSchema.parse(raw), { timer: timerEngine }))
+  )
+
+  ipcMain.handle('games:abort', (_event, raw: unknown) =>
+    settle(abortGame(db, abortGameInputSchema.parse(raw), { timer: timerEngine }))
+  )
 }
 
 export function registerAppHandlers(db: AppDatabase): void {
