@@ -1,20 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { GameSnapshot } from '@shared/schemas/games'
+import type { TeamRoster } from '@shared/schemas/roster'
+import { groupDisplayName } from '@shared/schemas/roster'
 import type { QuestionBankSummary } from '@shared/schemas/questions'
 import {
   clampTurnDurationSec,
   ROUND_COUNT_MAX,
   ROUND_COUNT_MIN,
-  TEAM_COUNT_MAX,
-  TEAM_COUNT_MIN,
   TURN_DURATION_SEC_MAX,
   TURN_DURATION_SEC_MIN,
   TURN_DURATION_SEC_STEP
 } from '@shared/constants'
 import { PageShell, StatPill } from '@renderer/components/layout/AppShell'
+import { RosterPanels } from '@renderer/components/roster/RosterPanels'
 import { Button } from '@renderer/components/ui/button'
-import { Card, CardDescription, CardTitle } from '@renderer/components/ui/card'
+import { Card, CardTitle } from '@renderer/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@renderer/components/ui/dialog'
 import { Input } from '@renderer/components/ui/input'
 import { Select } from '@renderer/components/ui/select'
 import { StatusNote } from '@renderer/components/ui/status-note'
@@ -96,12 +105,19 @@ function DurationField(): React.JSX.Element {
 }
 
 export function GameSetupPage(): React.JSX.Element {
+  const navigate = useNavigate()
   const store = useGameSetupStore()
   const [banks, setBanks] = useState<QuestionBankSummary[]>([])
+  const [roster, setRoster] = useState<TeamRoster | null>(null)
   const [availableCount, setAvailableCount] = useState(0)
   const [categories, setCategories] = useState<string[]>([])
-  const [created, setCreated] = useState<GameSnapshot | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [successOpen, setSuccessOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [createLocked, setCreateLocked] = useState(false)
+  const [created, setCreated] = useState<GameSnapshot | null>(null)
+  const pendingCommandId = useRef<string | null>(null)
 
   useEffect(() => {
     void window.gameAPI.questions.listBanks().then((list) => {
@@ -111,6 +127,7 @@ export function GameSetupPage(): React.JSX.Element {
         useGameSetupStore.getState().setBankId(list[0].id)
       }
     })
+    void window.gameAPI.app.getRoster().then(setRoster).catch(() => setRoster(null))
   }, [])
 
   useEffect(() => {
@@ -120,7 +137,6 @@ export function GameSetupPage(): React.JSX.Element {
       return
     }
     const bankId = store.bankId
-    const categoriesSelected = store.categoryFilter
     let cancelled = false
     void (async () => {
       try {
@@ -132,10 +148,32 @@ export function GameSetupPage(): React.JSX.Element {
         })
         if (cancelled) return
         setCategories(page.categories)
-        if (categoriesSelected.length === 0) {
-          setAvailableCount(page.total)
-          return
+        const currentFilter = useGameSetupStore.getState().categoryFilter
+        if (currentFilter.length === 0 && page.categories.length > 0) {
+          useGameSetupStore.getState().setCategoryFilterAll(page.categories)
         }
+      } catch (e) {
+        if (!cancelled) {
+          setCategories([])
+          setError((e as Error).message)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [store.bankId])
+
+  useEffect(() => {
+    if (!store.bankId || store.categoryFilter.length === 0) {
+      setAvailableCount(0)
+      return
+    }
+    const bankId = store.bankId
+    const categoriesSelected = store.categoryFilter
+    let cancelled = false
+    void (async () => {
+      try {
         const counts = await Promise.all(
           categoriesSelected.map((category) =>
             window.gameAPI.questions.list({
@@ -161,49 +199,71 @@ export function GameSetupPage(): React.JSX.Element {
     }
   }, [store.bankId, store.categoryFilter])
 
-  const challengeCount = store.teamCount * store.roundCount
+  const groupCount = roster?.groupCount ?? 0
+  const challengeCount = groupCount * store.roundCount
 
-  const schedulePreview = useMemo(
-    () =>
-      store.teams
-        .slice(0, 3)
-        .map((t) => t.name)
-        .join(' → '),
-    [store.teams]
-  )
+  const schedulePreview = useMemo(() => {
+    if (!roster) return ''
+    return [...roster.groups]
+      .sort((a, b) => a.group - b.group)
+      .slice(0, 3)
+      .map((group) => groupDisplayName(group.group))
+      .join(' → ')
+  }, [roster])
 
-  const onCreate = async (): Promise<void> => {
+  const validateBeforeConfirm = (): string | null => {
+    if (!store.bankId) return '请选择题库'
+    if (store.categoryFilter.length === 0) return '至少选择一个分类'
+    if (availableCount < 1) return '可用题目不足，无法创建比赛'
+    if (!roster) return '分组名单尚未加载'
+    return null
+  }
+
+  const openConfirm = (): void => {
     setError(null)
-    setCreated(null)
-    if (!store.bankId) {
-      setError('请选择题库')
+    const message = validateBeforeConfirm()
+    if (message) {
+      setError(message)
       return
     }
-    if (availableCount < 1) {
-      setError('可用题目不足，无法创建比赛')
-      return
-    }
+    pendingCommandId.current = crypto.randomUUID()
+    setConfirmOpen(true)
+  }
+
+  const runCreate = async (): Promise<void> => {
+    if (creating || !store.bankId || !pendingCommandId.current) return
+    setCreating(true)
+    setError(null)
     try {
       const snapshot = await window.gameAPI.games.create({
+        commandId: pendingCommandId.current,
         bankId: store.bankId,
-        categoryFilter: store.categoryFilter.length ? store.categoryFilter : undefined,
+        categoryFilter: store.categoryFilter,
         roundCount: store.roundCount,
         turnDurationSec: store.turnDurationSec,
         scoreMode: 'UNIFORM',
-        teams: store.teams.map((team) => ({
-          name: team.name,
-          color: team.color,
-          sortOrder: team.sortOrder
-        }))
+        performerMembers: store.performerMembers
       })
       setCreated(snapshot)
+      setConfirmOpen(false)
+      setSuccessOpen(true)
+      setCreateLocked(true)
     } catch (e) {
+      setConfirmOpen(false)
       setError((e as Error).message)
+    } finally {
+      setCreating(false)
     }
   }
 
+  const closeSuccess = (): void => {
+    setSuccessOpen(false)
+    setCreateLocked(false)
+    pendingCommandId.current = null
+  }
+
   return (
-    <PageShell title="比赛配置" subtitle="Genpact Dalian Digital · 队伍 2–12 · 创建时冻结题目队列">
+    <PageShell title="比赛配置" subtitle="Genpact Dalian Digital · 固定分组 · 创建时冻结题目队列">
       <div className="mb-4">
         <Button asChild variant="ghost">
           <Link to="/">返回首页</Link>
@@ -217,71 +277,26 @@ export function GameSetupPage(): React.JSX.Element {
       ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card className="space-y-6">
-          <div>
-            <CardTitle>队伍配置</CardTitle>
-            <CardDescription className="mt-1">
-              名称非空且不可重复。颜色和出场顺序在创建时冻结。
-            </CardDescription>
-          </div>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-first-03">队伍数</span>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => store.setTeamCount(store.teamCount - 1)}
-              disabled={store.teamCount <= TEAM_COUNT_MIN}
-            >
-              −
-            </Button>
-            <Input
-              type="number"
-              min={TEAM_COUNT_MIN}
-              max={TEAM_COUNT_MAX}
-              value={store.teamCount}
-              onChange={(e) =>
-                store.setTeamCount(Number.parseInt(e.target.value, 10) || TEAM_COUNT_MIN)
+        <div className="space-y-4">
+          <Card className="space-y-3 p-4">
+            <CardTitle>人员名单</CardTitle>
+            <p className="text-sm text-first-03">
+              组名、出场顺序和颜色在创建时冻结，不能在这里修改。点击成员可标记「表演题目」（每组最多一位），不会写回分组 JSON。
+            </p>
+          </Card>
+          {roster ? (
+            <RosterPanels
+              roster={roster}
+              variant="members"
+              performerMembers={store.performerMembers}
+              onTogglePerformer={(member, groupMembers) =>
+                store.togglePerformer(member, groupMembers)
               }
-              className="w-20 text-center"
             />
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => store.setTeamCount(store.teamCount + 1)}
-              disabled={store.teamCount >= TEAM_COUNT_MAX}
-            >
-              +
-            </Button>
-          </div>
-          <div className="space-y-3">
-            {store.teams.map((team, index) => (
-              <div
-                key={index}
-                className="grid gap-3 rounded-[12px] border border-line bg-midnight/40 p-3 md:grid-cols-[1fr_auto_auto_auto]"
-                style={{ boxShadow: `inset 3px 0 0 ${team.color}` }}
-              >
-                <Input
-                  value={team.name}
-                  aria-label={`队伍 ${index + 1} 名称`}
-                  onChange={(e) => store.updateTeam(index, { name: e.target.value })}
-                />
-                <input
-                  type="color"
-                  value={team.color}
-                  onChange={(e) => store.updateTeam(index, { color: e.target.value })}
-                  className="h-10 w-14 cursor-pointer rounded-[10px] border border-first-01 bg-transparent"
-                  aria-label={`队伍 ${index + 1} 颜色`}
-                />
-                <Button variant="secondary" size="sm" onClick={() => store.moveTeam(index, -1)}>
-                  上移
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => store.moveTeam(index, 1)}>
-                  下移
-                </Button>
-              </div>
-            ))}
-          </div>
-        </Card>
+          ) : (
+            <p className="text-sm text-first-03">正在加载分组…</p>
+          )}
+        </div>
 
         <div className="space-y-6 xl:sticky xl:top-4 xl:self-start">
           <Card className="space-y-4">
@@ -312,7 +327,7 @@ export function GameSetupPage(): React.JSX.Element {
             </div>
             {categories.length > 0 ? (
               <div>
-                <p className="mb-2 text-sm text-first-03">分类筛选（可选）</p>
+                <p className="mb-2 text-sm text-first-03">分类筛选</p>
                 <div className="flex flex-wrap gap-2">
                   {categories.map((cat) => {
                     const active = store.categoryFilter.includes(cat)
@@ -336,39 +351,77 @@ export function GameSetupPage(): React.JSX.Element {
           <div className="grid grid-cols-2 gap-3">
             <StatPill
               label="挑战场次"
-              value={`${store.teamCount} × ${store.roundCount} = ${challengeCount}`}
+              value={`${groupCount} × ${store.roundCount} = ${challengeCount}`}
             />
             <StatPill label="可用题目" value={availableCount} />
           </div>
           <p className="text-sm text-first-03">顺序预览：{schedulePreview} … 每轮重复</p>
-          <Button size="lg" className="w-full" onClick={() => void onCreate()}>
+          <Button
+            size="lg"
+            className="w-full"
+            disabled={createLocked || creating}
+            onClick={openConfirm}
+          >
             创建并冻结题目队列
           </Button>
         </div>
       </div>
 
-      {created ? (
-        <Card className="mt-8 border-gold/50">
-          <CardTitle>已创建 · {created.name}</CardTitle>
-          <CardDescription className="mt-2">
-            状态 {created.status} · 队列 {created.queueSize} 题 · 计划挑战{' '}
-            {created.plannedTurnCount} 场 · 首场 {created.turns[0]?.status}
-          </CardDescription>
-          <Button asChild className="mt-4">
-            <Link to={`/session/${created.id}`}>进入准备页</Link>
-          </Button>
-          <ol className="mt-4 max-h-48 space-y-1 overflow-auto text-sm text-first-03">
-            {created.turns.slice(0, 12).map((turn) => {
-              const team = created.teams.find((t) => t.id === turn.teamId)
-              return (
-                <li key={turn.id}>
-                  #{turn.sequenceNo} 轮次 {turn.roundNo} · {team?.name} · {turn.status}
-                </li>
-              )
-            })}
-          </ol>
-        </Card>
-      ) : null}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent
+          onPointerDownOutside={(event) => {
+            if (creating) event.preventDefault()
+          }}
+          onEscapeKeyDown={(event) => {
+            if (creating) event.preventDefault()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>创建这场比赛？</DialogTitle>
+            <DialogDescription>
+              {groupCount} 组 × {store.roundCount} 轮 = {challengeCount} 场挑战，每场{' '}
+              {store.turnDurationSec} 秒。创建后队伍与题目队列不能修改。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="secondary" disabled={creating} onClick={() => setConfirmOpen(false)}>
+              取消
+            </Button>
+            <Button disabled={creating} onClick={() => void runCreate()}>
+              {creating ? '正在创建…' : '创建'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={successOpen}
+        onOpenChange={(open) => {
+          if (!open) closeSuccess()
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>已创建 · {created?.name}</DialogTitle>
+            <DialogDescription>
+              状态 {created?.status} · 队列 {created?.queueSize} 题 · 计划挑战{' '}
+              {created?.plannedTurnCount} 场 · 首场 {created?.turns[0]?.status}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="secondary" onClick={closeSuccess}>
+              关闭
+            </Button>
+            <Button
+              onClick={() => {
+                if (created) navigate(`/session/${created.id}`)
+              }}
+            >
+              进入准备页
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageShell>
   )
 }

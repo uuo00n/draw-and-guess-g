@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { motion, useReducedMotion } from 'motion/react'
 import type { GameCommandResult, PlaySnapshot } from '@shared/schemas/play'
 import { GenpactBrand } from '@renderer/components/branding/GenpactBrand'
+import { ScrollablePageRoot } from '@renderer/components/layout/AppShell'
 import { TeamScoreStrip } from '@renderer/components/TeamScoreStrip'
 import { CountdownRing } from '@renderer/components/CountdownRing'
 import { ScoreValue } from '@renderer/components/ScoreValue'
@@ -13,6 +14,7 @@ import { useTurnClock } from '@renderer/hooks/useTurnClock'
 import { ChampionMark, useSessionEffects } from '@renderer/hooks/useSessionEffects'
 import { useUiSettings } from '@renderer/stores/ui-settings-store'
 import { cn } from '@renderer/lib/utils'
+import { formatMembersDisplay } from '@renderer/lib/member-display'
 
 function newCommandId(): string {
   return crypto.randomUUID()
@@ -101,42 +103,49 @@ export function GameSessionPage(): React.JSX.Element {
     : `共 ${snapshot.roundCount} 轮`
 
   return (
-    <div className="app-shell session-shell">
-      <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <GenpactBrand variant="wordmark" height={44} />
-          <span className="hidden h-7 w-px bg-first-01 sm:block" />
-          <p className="min-w-0 text-sm text-first-03 sm:text-base">
-            <span className="text-morning">Genpact Dalian Digital</span>
-            <span className="mx-2 text-first-01">|</span>
-            <span className="tracking-[0.12em] text-morning">DRAW &amp; GUESS</span>
-            <span className="mx-2 text-first-01">|</span>
-            <span className="text-gold">{roundLabel}</span>
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
-          <Button variant="ghost" onClick={() => setMuted(!muted)}>
-            {muted ? '已静音' : '音效开'}
-          </Button>
-          <Button variant="ghost" onClick={() => void window.gameAPI.app.toggleFullscreen()}>
-            投影全屏
-          </Button>
-          <Link to={`/history/${gameId}`} className="px-2 text-coral hover:text-coral-hover">
-            记录
-          </Link>
-          <Link to="/" className="px-2 text-first-03 hover:text-morning">
-            返回首页
-          </Link>
-        </div>
-      </header>
+    <ScrollablePageRoot
+      className="session-shell"
+      scrollClassName="flex min-h-0 flex-col"
+      header={
+        <>
+          <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <GenpactBrand variant="wordmark" height={44} />
+              <span className="hidden h-7 w-px bg-first-01 sm:block" />
+              <p className="min-w-0 text-sm text-first-03 sm:text-base">
+                <span className="text-morning">Genpact Dalian Digital</span>
+                <span className="mx-2 text-first-01">|</span>
+                <span className="tracking-[0.12em] text-morning">DRAW &amp; GUESS</span>
+                <span className="mx-2 text-first-01">|</span>
+                <span className="text-gold">{roundLabel}</span>
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
+              <Button variant="ghost" onClick={() => setMuted(!muted)}>
+                {muted ? '已静音' : '音效开'}
+              </Button>
+              <Button variant="ghost" onClick={() => void window.gameAPI.app.toggleFullscreen()}>
+                投影全屏
+              </Button>
+              <Link to={`/history/${gameId}`} className="px-2 text-coral hover:text-coral-hover">
+                记录
+              </Link>
+              <Link to="/" className="px-2 text-first-03 hover:text-morning">
+                返回首页
+              </Link>
+            </div>
+          </header>
 
-      {error ? (
-        <StatusNote tone="danger" className="mb-3">
-          {error}
-        </StatusNote>
-      ) : null}
+          {error ? (
+            <StatusNote tone="danger" className="mb-3">
+              {error}
+            </StatusNote>
+          ) : null}
 
-      <TeamScoreStrip snapshot={snapshot} />
+          <TeamScoreStrip snapshot={snapshot} />
+        </>
+      }
+    >
       <motion.section
         key={`${snapshot.phase}:${snapshot.currentTurn?.id ?? 'none'}:${snapshot.currentQuestion?.queueItemId ?? 'none'}`}
         className="mt-4 flex min-h-0 flex-1 flex-col"
@@ -146,7 +155,7 @@ export function GameSessionPage(): React.JSX.Element {
       >
         {renderPhase(snapshot)}
       </motion.section>
-    </div>
+    </ScrollablePageRoot>
   )
 
   function renderPhase(current: PlaySnapshot): React.JSX.Element {
@@ -231,6 +240,9 @@ export function GameSessionPage(): React.JSX.Element {
     }
     if (current.phase === 'ready') {
       const seconds = Math.round(current.turnDurationMs / 1000)
+      const team = current.teams.find((item) => item.id === current.currentTurn?.teamId)
+      const members = team?.members ?? []
+      const performer = team?.performer ?? null
       return (
         <div className="mx-auto flex max-w-4xl flex-1 flex-col items-center justify-center text-center">
           <p className="text-xs font-semibold tracking-[0.22em] text-gold">
@@ -239,6 +251,11 @@ export function GameSessionPage(): React.JSX.Element {
           <h2 className="mt-4 text-5xl font-semibold lg:text-6xl">
             下一位：{current.currentTurn?.teamName}
           </h2>
+          {members.length > 0 ? (
+            <p className="mt-4 max-w-3xl text-lg text-first-03">
+              {formatMembersDisplay(members, performer)}
+            </p>
+          ) : null}
           <p className="mt-4 text-first-03">准备页不展示题目。主持人确认后才开始计时。</p>
           <Button
             size="lg"
