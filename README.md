@@ -1,6 +1,6 @@
-# 你画我猜
+# Genpact-draw&guess
 
-Genpact Dalian Digital 团建用的单机桌面程序。主持人用一台电脑把画面投到大屏，题目公开，各组轮流作答。程序完全离线，比赛、题库和历史都写在本机 SQLite。
+Genpact China Digital 团建用的单机桌面程序。主持人用一台电脑把画面投到大屏，题目公开，各组轮流作答。程序完全离线，比赛、题库和历史都写在本机 SQLite。
 
 当前版本 **1.1.0**。正式支持与发布门禁是 **Windows 11 x64**；Windows 10 x64 尽力兼容。macOS 与 Windows 都可以开发和打包，Windows 安装包必须在 Windows x64 上构建并实机验收。
 
@@ -23,7 +23,7 @@ Genpact Dalian Digital 团建用的单机桌面程序。主持人用一台电脑
 - 队伍来自当前分组 JSON，默认 8 组，队名是「第 N 组」。创建时冻结顺序、颜色和到场成员。赛中不能改组或重排。
 - 轮数固定为 1。单次挑战 30–300 秒，默认 60 秒。答对 +1，跳过不加分。答对或跳过立刻换题，本组剩余时间不重置。
 - 任意时刻只有一组在计时。下一组要在准备页手动开始。
-- 同一规范化题目在一场里只首次分配一次。没有未使用题目时，本场提前结束，不授冠军。
+- 同一规范化题目在本机只分配一次，重置已出题记录或清空历史后可以重新抽取。没有未使用题目时，本场提前结束，不授冠军。
 - `Ctrl+Z` 只撤销本挑战最近一次尚未被后续判定覆盖的答对或跳过。计时不回退。
 - 分数、计时和抽题以主进程为准。圆环、撒花和音效只做展示。
 
@@ -74,12 +74,12 @@ npm run build:mac
 
 Windows 产物：
 
-- `dist/你画我猜-1.1.0-win-x64-Setup.exe`
-- `dist/你画我猜-1.1.0-win-x64-Portable.exe`
+- `dist/Genpact-draw&guess-1.1.0-win-x64-Setup.exe`
+- `dist/Genpact-draw&guess-1.1.0-win-x64-Portable.exe`
 
 macOS 产物：
 
-- `dist/draw-and-guess-1.1.0.dmg`
+- `dist/Genpact-draw&guess-1.1.0.dmg`
 - 同版本的 zip
 
 在 macOS 上交叉打出的 Windows 包不能当作发布通过。安装包未签名：Windows 可能被 SmartScreen 拦截，macOS 未公证。持续集成工作流是 `.github/workflows/windows-build.yml`。
@@ -88,14 +88,14 @@ macOS 产物：
 
 ## 数据
 
-数据库在 Electron `userData/data/draw-and-guess.db`，不跟安装目录或 Portable exe 放在一起。
+改名后继续使用原用户数据目录，以保留题库、比赛历史和本机设置。数据库在 Electron `userData/data/draw-and-guess.db`，不跟安装目录或 Portable exe 放在一起。
 
 | 系统 | 通常路径 |
 |---|---|
 | Windows | `%APPDATA%\你画我猜\data\draw-and-guess.db` |
 | macOS | `~/Library/Application Support/你画我猜/data/draw-and-guess.db` |
 
-设置页可以备份、恢复、打开数据目录，以及清空全部历史。清空不会删除题库、当前分组 JSON 和磁盘上已有的备份文件。
+设置页的「数据库」区域可以备份、恢复、打开数据目录、重置已出题记录和清空全部历史。重置已出题记录会保留题库、历史和成绩，需要先结束未完成的比赛。清空历史会同时清除已出题记录。题库、当前分组 JSON 和已有备份文件会保留。
 
 ## 文档
 

@@ -1,6 +1,6 @@
 # 打包说明
 
-本文说明如何把「你画我猜」打成 Windows 与 macOS 安装包。配置以仓库根目录的 `package.json` 和 `electron-builder.yml` 为准。
+本文说明如何把 `Genpact-draw&guess` 打成 Windows 与 macOS 安装包。配置以仓库根目录的 `package.json` 和 `electron-builder.yml` 为准。
 
 当前版本 **1.1.0**。运行时是 Electron **44.10.2**（内置 Node 24.22.2，`NODE_MODULE_VERSION` 149）。打包工具是 electron-builder。包管理器只用 npm，锁文件是 `package-lock.json`。
 
@@ -79,8 +79,8 @@ npm run build && electron-builder --win nsis portable --x64
 
 | 文件 | 说明 |
 |---|---|
-| `你画我猜-1.1.0-win-x64-Setup.exe` | NSIS 安装包。创建桌面快捷方式，显示名称为「你画我猜」 |
-| `你画我猜-1.1.0-win-x64-Portable.exe` | 免安装包。数据库仍在用户数据目录，不跟 exe 放在一起 |
+| `Genpact-draw&guess-1.1.0-win-x64-Setup.exe` | NSIS 安装包。创建桌面快捷方式，显示名称为 `Genpact-draw&guess` |
+| `Genpact-draw&guess-1.1.0-win-x64-Portable.exe` | 免安装包。数据库仍在用户数据目录，不跟 exe 放在一起 |
 
 版本号来自 `package.json` 的 `version`。升级版本后，文件名中的 `1.1.0` 会跟着变。
 
@@ -101,6 +101,10 @@ npm run build:unpack
 - 断网可以启动，题库导入、比赛、历史都能完成
 - `better-sqlite3` 能打开数据库，没有 `NODE_MODULE_VERSION` 不匹配
 - 音效、Lottie 和许可证清单从安装包内加载，不访问外网
+- 同时打开 Setup 安装版与 Portable，确认只唤起已有窗口，计时不中断
+- 计时中取消退出后继续计时。确认退出后重开，核对剩余时间、分数和换题。任务管理器强退后重开，核对暂停恢复
+- 检查主程序 `Genpact-draw&guess.exe`、交付文件名、窗口、快捷方式、卸载项和文件属性中的名称，包括 `&`
+- 先备份旧版数据库，再覆盖安装，检查旧快捷方式、题库、历史和本机设置。升级失败时用旧版程序与升级前备份回退
 
 安装包未签名。SmartScreen 或企业白名单可能拦截。这是发布条件，不能靠改业务规则绕过。需要公司签名或把文件加入允许列表。
 
@@ -124,10 +128,10 @@ electron-vite build && electron-builder --mac
 
 | 文件 | 说明 |
 |---|---|
-| `draw-and-guess-1.1.0.dmg` | 磁盘映像，里面是「你画我猜.app」 |
-| `draw-and-guess-1.1.0-mac.zip` | 同一应用的 zip。后缀里的架构名以当次 electron-builder 输出为准 |
+| `Genpact-draw&guess-1.1.0.dmg` | 磁盘映像，里面是 `Genpact-draw&guess.app` |
+| `Genpact-draw&guess-1.1.0-mac.zip` | 同一应用的 zip。后缀里的架构名以当次 electron-builder 输出为准 |
 
-dmg 文件名用的是包名 `name`（`draw-and-guess`），窗口里显示的应用名仍是 `productName`（你画我猜）。
+DMG 文件名和应用窗口均使用配置中的 `productName`。
 
 需要指定架构时，在 `npm run build` 之后执行：
 
@@ -153,7 +157,7 @@ npx electron-builder --mac --x64
 
 ## 6. 数据目录
 
-数据库路径固定为：
+改名后沿用旧版用户数据目录，保留题库、历史和本机设置。数据库路径如下。
 
 ```text
 app.getPath('userData')/data/draw-and-guess.db
