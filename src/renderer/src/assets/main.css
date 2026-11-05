@@ -92,6 +92,9 @@ body {
 }
 
 .gp-stage {
+  height: 100dvh;
+  min-height: 100vh;
+  overflow: hidden;
   background-color: var(--gp-midnight);
   background-image:
     linear-gradient(rgba(173, 177, 172, 0.045) 1px, transparent 1px),
@@ -112,11 +115,26 @@ body {
   display: flex;
   width: 100%;
   max-width: 1920px;
-  min-height: 100vh;
+  min-height: 0;
+  height: 100%;
   flex: 1;
   flex-direction: column;
   margin-inline: auto;
   padding: 1.5rem 2.5rem 3.5rem;
+}
+
+.app-shell--scroll {
+  overflow: hidden;
+}
+
+.app-shell__pin {
+  background: color-mix(in srgb, var(--gp-midnight) 92%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.scroll-to-top {
+  right: 20px;
+  bottom: 52px;
 }
 
 .session-shell {
@@ -271,6 +289,11 @@ body {
   .developer-credit {
     right: 12px;
     bottom: 8px;
+  }
+
+  .scroll-to-top {
+    right: 12px;
+    bottom: 44px;
   }
 }
 

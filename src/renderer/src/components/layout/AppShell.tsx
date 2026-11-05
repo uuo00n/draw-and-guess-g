@@ -1,5 +1,10 @@
 import { GenpactBrand } from '@renderer/components/branding/GenpactBrand'
+import {
+  ScrollToTopButton,
+  scrollTopFadeOpacity
+} from '@renderer/components/layout/ScrollToTopButton'
 import { cn } from '@renderer/lib/utils'
+import { useCallback, useRef, useState } from 'react'
 
 export function AppHeader({
   title,
@@ -29,6 +34,44 @@ export function AppHeader({
   )
 }
 
+export function ScrollablePageRoot({
+  children,
+  header,
+  className,
+  scrollClassName
+}: {
+  children: React.ReactNode
+  header?: React.ReactNode
+  className?: string
+  scrollClassName?: string
+}): React.JSX.Element {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [scrollTop, setScrollTop] = useState(0)
+  const opacity = scrollTopFadeOpacity(scrollTop)
+
+  const onScroll = useCallback((): void => {
+    setScrollTop(scrollRef.current?.scrollTop ?? 0)
+  }, [])
+
+  const scrollToTop = useCallback((): void => {
+    scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
+  return (
+    <div className={cn('app-shell app-shell--scroll', className)}>
+      {header ? <div className="app-shell__pin shrink-0">{header}</div> : null}
+      <div
+        ref={scrollRef}
+        className={cn('app-shell__scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain', scrollClassName)}
+        onScroll={onScroll}
+      >
+        {children}
+      </div>
+      <ScrollToTopButton opacity={opacity} onClick={scrollToTop} />
+    </div>
+  )
+}
+
 export function PageShell({
   children,
   title,
@@ -41,10 +84,12 @@ export function PageShell({
   className?: string
 }): React.JSX.Element {
   return (
-    <div className={cn('app-shell', className)}>
-      <AppHeader title={title} subtitle={subtitle} />
-      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
-    </div>
+    <ScrollablePageRoot
+      className={className}
+      header={<AppHeader title={title} subtitle={subtitle} />}
+    >
+      <div className="flex min-h-0 flex-col pb-1">{children}</div>
+    </ScrollablePageRoot>
   )
 }
 

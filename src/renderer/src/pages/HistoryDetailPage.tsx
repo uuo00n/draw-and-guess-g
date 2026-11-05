@@ -90,6 +90,15 @@ export function HistoryDetailPage(): React.JSX.Element {
                     {team.totalScore}
                   </span>
                 </div>
+                {team.members.length > 0 ? (
+                  <p className="mt-2 text-sm text-first-03">
+                    {team.members
+                      .map((member) =>
+                        team.performer === member ? `${member}（表演题目）` : member
+                      )
+                      .join('、')}
+                  </p>
+                ) : null}
                 <p className="mt-1 text-sm text-first-03">
                   正常完成 {team.finishedTurns} 次 · 未进行 {team.notPlayedTurns} 次
                 </p>
