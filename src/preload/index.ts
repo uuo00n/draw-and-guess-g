@@ -7,16 +7,19 @@ import {
 import { homeSummarySchema, type HomeSummary } from '../shared/schemas/app'
 import {
   backupResultSchema,
+  clearHistoryResultSchema,
   dataInfoSchema,
   gameHistorySchema,
   historyListItemSchema,
   historyQuerySchema,
+  replaceRosterResultSchema,
   restoreResultSchema,
   type DataInfo,
   type GameHistory,
   type HistoryListItem,
   type HistoryQuery
 } from '../shared/schemas/history'
+import { teamRosterSchema, type TeamRoster } from '../shared/schemas/roster'
 import {
   abortGameInputSchema,
   gameCommandInputSchema,
@@ -115,7 +118,17 @@ const gameAPI = {
     backupDatabase: (): Promise<{ saved: boolean; path?: string }> =>
       invoke('app:backupDatabase').then((raw) => backupResultSchema.parse(raw)),
     restoreDatabase: (): Promise<{ restored: boolean; safetyPath?: string }> =>
-      invoke('app:restoreDatabase').then((raw) => restoreResultSchema.parse(raw))
+      invoke('app:restoreDatabase').then((raw) => restoreResultSchema.parse(raw)),
+    getRoster: (): Promise<TeamRoster> =>
+      invoke('app:getRoster').then((raw) => teamRosterSchema.parse(raw)),
+    replaceRosterFile: (): Promise<{ ok: boolean; roster?: TeamRoster; error?: string }> =>
+      invoke('app:previewRosterFile').then((raw) => replaceRosterResultSchema.parse(raw)),
+    saveRoster: (roster: TeamRoster): Promise<TeamRoster> =>
+      invoke('app:saveRoster', teamRosterSchema.parse(roster)).then((raw) =>
+        teamRosterSchema.parse(raw)
+      ),
+    clearAllHistory: (): Promise<{ deletedCount: number }> =>
+      invoke('app:clearAllHistory').then((raw) => clearHistoryResultSchema.parse(raw))
   },
   events: {
     subscribe: (handler: (event: GameUiEvent) => void): (() => void) => {

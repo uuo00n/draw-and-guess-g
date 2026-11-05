@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { app } from 'electron'
 import type { AppDatabase } from './database/connection'
 import { TimerEngine } from './domain/timer-engine'
 import { createGame } from './domain/game-create'
@@ -14,7 +15,7 @@ import {
   submitAnswer
 } from './domain/game-engine'
 import { commitImportRows } from './services/question-service'
-import { TEAM_PALETTE } from '../shared/constants'
+import { saveCurrentRoster } from './services/roster-service'
 
 const DURATION = 60_000
 
@@ -26,6 +27,21 @@ export type E2EResult = {
 
 function assert(condition: unknown, message: string): void {
   if (!condition) throw new Error(message)
+}
+
+function e2eDataDir(): string {
+  return `${process.env.E2E_USER_DATA ?? app.getPath('userData')}/data`
+}
+
+function seedE2ERoster(): void {
+  saveCurrentRoster(e2eDataDir(), {
+    total: 2,
+    groupCount: 2,
+    groups: [
+      { group: 1, members: ['E2E-甲'] },
+      { group: 2, members: ['E2E-乙'] }
+    ]
+  })
 }
 
 function makeGame(db: AppDatabase, texts: string[], name: string) {
@@ -42,24 +58,27 @@ function makeGame(db: AppDatabase, texts: string[], name: string) {
     }))
   )
   if (!imported.bankId) throw new Error('导入失败')
-  return createGame(db, {
-    name,
-    bankId: imported.bankId,
-    roundCount: 1,
-    turnDurationSec: 60,
-    scoreMode: 'UNIFORM',
-    teams: [0, 1].map((index) => ({
-      name: `${name}-${index + 1}`,
-      color: TEAM_PALETTE[index],
-      sortOrder: index
-    }))
-  })
+  return createGame(
+    db,
+    {
+      commandId: randomUUID(),
+      name,
+      bankId: imported.bankId,
+      roundCount: 1,
+      turnDurationSec: 60,
+      scoreMode: 'UNIFORM',
+      categoryFilter: ['烟测'],
+      performerMembers: []
+    },
+    { dataDir: e2eDataDir() }
+  )
 }
 
 export function runElectronGameFlow(db: AppDatabase): E2EResult {
   const steps: string[] = []
   const timer = new TimerEngine()
   try {
+    seedE2ERoster()
     const game = makeGame(db, ['长颈鹿', '火锅', '画蛇添足', '需求变更'], '闭环')
     const t0 = 50_000_000
     const ready = getPlaySnapshot(db, game.id, { timer, now: t0 })
@@ -142,7 +161,7 @@ export function runElectronGameFlow(db: AppDatabase): E2EResult {
     const done = settleTimeout(db, game.id, { timer, now: t0 + DURATION + 5 + DURATION })
     assert(done.snapshot.status === 'GAME_FINISHED', '全部按时间结束才是 GAME_FINISHED')
     assert(done.snapshot.phase === 'final', '应进入结果页')
-    assert(second.snapshot.currentTurn?.teamName === '闭环-2', '第二队才开始挑战')
+    assert(second.snapshot.currentTurn?.teamName === '第 2 组', '第二组才开始挑战')
     steps.push('final')
 
     const race = makeGame(db, ['超时题', '备用题'], '超时优先')
@@ -171,7 +190,8 @@ export function runElectronGameFlow(db: AppDatabase): E2EResult {
     pauseTurn(db, { gameId: resumeGame.id, commandId: randomUUID() }, { timer, now: t0 + 2000 })
     resumeTurn(db, { gameId: resumeGame.id, commandId: randomUUID() }, { timer, now: t0 + 9000 })
     checkpointRunning(db, timer, t0 + 10_000)
-    const question = getPlaySnapshot(db, resumeGame.id, { timer, now: t0 + 10_000 }).currentQuestion?.queueItemId
+    const question = getPlaySnapshot(db, resumeGame.id, { timer, now: t0 + 10_000 }).currentQuestion
+      ?.queueItemId
     const positions = db
       .prepare('SELECT queue_position FROM game_question_queue WHERE game_id = ? ORDER BY queue_position')
       .all(resumeGame.id)

@@ -1,9 +1,10 @@
-import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { z } from 'zod'
 import type { AppDatabase } from '../database/connection'
 import { createGameInputSchema } from '../../shared/schemas/games'
+import { teamRosterSchema, validateTeamRoster } from '../../shared/schemas/roster'
 import { exportBankInputSchema, questionQuerySchema } from '../../shared/schemas/questions'
 import {
   abortGameInputSchema,
@@ -43,6 +44,8 @@ import {
   parseImportFile
 } from '../services/question-service'
 import { IMPORT_MAX_BYTES } from '../../shared/constants'
+import { loadCurrentRoster, saveCurrentRoster, RosterValidationError } from '../services/roster-service'
+import { purgeAllGames } from '../services/game-purge'
 
 export function registerQuestionHandlers(db: AppDatabase): void {
   ipcMain.handle('questions:importFile', async () => {
@@ -116,10 +119,10 @@ function settle<T extends { uiEvent?: GameUiEvent }>(result: T): Omit<T, 'uiEven
   return rest
 }
 
-export function registerGameHandlers(db: AppDatabase): void {
+export function registerGameHandlers(db: AppDatabase, options: { dataDir: string }): void {
   ipcMain.handle('games:create', (_event, raw: unknown) => {
     const input = createGameInputSchema.parse(raw)
-    return createGame(db, input)
+    return createGame(db, input, { dataDir: options.dataDir })
   })
 
   ipcMain.handle('games:get', (_event, gameId: unknown) => {
@@ -187,11 +190,51 @@ function focusedWindow(): BrowserWindow | undefined {
 
 export function registerAppHandlers(
   db: AppDatabase,
-  options: { dbPath: string; timer: TimerEngine }
+  options: { dbPath: string; dataDir: string; timer: TimerEngine }
 ): void {
-  ipcMain.handle('app:getHomeSummary', () => ({
-    activeQuestionCount: countActiveQuestions(db),
-    version: app.getVersion()
+  ipcMain.handle('app:getHomeSummary', () => {
+    const roster = loadCurrentRoster(options.dataDir)
+    return {
+      activeQuestionCount: countActiveQuestions(db),
+      version: app.getVersion(),
+      rosterGroupCount: roster.groupCount,
+      rosterMemberCount: roster.total
+    }
+  })
+
+  ipcMain.handle('app:getRoster', () => loadCurrentRoster(options.dataDir))
+
+  ipcMain.handle('app:previewRosterFile', async () => {
+    const picked = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'JSON', extensions: ['json'] }]
+    })
+    if (picked.canceled || picked.filePaths.length === 0) {
+      return { ok: false as const, error: '已取消' }
+    }
+    try {
+      const raw = JSON.parse(readFileSync(picked.filePaths[0], 'utf8')) as unknown
+      const roster = validateTeamRoster(raw)
+      return { ok: true as const, roster: teamRosterSchema.parse(roster) }
+    } catch (error) {
+      const message =
+        error instanceof RosterValidationError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : '无法读取分组 JSON'
+      return { ok: false as const, error: message }
+    }
+  })
+
+  ipcMain.handle('app:saveRoster', (_event, raw: unknown) => {
+    const roster = teamRosterSchema.parse(raw)
+    saveCurrentRoster(options.dataDir, roster)
+    return roster
+  })
+
+  ipcMain.handle('app:clearAllHistory', () => ({
+    deletedCount: purgeAllGames(db, options.timer)
   }))
 
   ipcMain.handle('app:getDataInfo', () => ({
@@ -242,8 +285,9 @@ export function registerAppHandlers(
   })
 }
 
-export function initDatabasePath(): string {
-  const dbPath = app.getPath('userData') + '/data/draw-and-guess.db'
-  mkdirSync(dirname(dbPath), { recursive: true })
-  return dbPath
+export function initDatabasePath(): { dbPath: string; dataDir: string } {
+  const dataDir = app.getPath('userData') + '/data'
+  const dbPath = dataDir + '/draw-and-guess.db'
+  mkdirSync(dataDir, { recursive: true })
+  return { dbPath, dataDir }
 }

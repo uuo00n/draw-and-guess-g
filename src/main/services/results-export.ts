@@ -34,9 +34,16 @@ export async function buildResultsWorkbook(db: AppDatabase, gameId: string): Pro
   for (const row of overviewRows) overview.addRow(row)
 
   const ranking = workbook.addWorksheet('排行')
-  ranking.addRow(['名次', '队伍', '总分', '正常完成次数', '未进行次数'])
+  ranking.addRow(['名次', '队伍', '成员', '总分', '正常完成次数', '未进行次数'])
   for (const team of history.teams) {
-    ranking.addRow([team.rank, team.name, team.totalScore, team.finishedTurns, team.notPlayedTurns])
+    ranking.addRow([
+      team.rank,
+      team.name,
+      team.members.join('、'),
+      team.totalScore,
+      team.finishedTurns,
+      team.notPlayedTurns
+    ])
   }
 
   const questions = workbook.addWorksheet('逐题')

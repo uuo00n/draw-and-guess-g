@@ -108,12 +108,12 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  const dbPath = initDatabasePath()
-  db = openDatabase(dbPath)
+  const initPaths = initDatabasePath()
+  db = openDatabase(initPaths.dbPath)
   recoverDatabase(db, timerEngine)
   registerQuestionHandlers(db)
-  registerGameHandlers(db)
-  registerAppHandlers(db, { dbPath, timer: timerEngine })
+  registerGameHandlers(db, { dataDir: initPaths.dataDir })
+  registerAppHandlers(db, { dbPath: initPaths.dbPath, dataDir: initPaths.dataDir, timer: timerEngine })
 
   if (process.env.E2E_GAME_FLOW === '1') {
     const result = runElectronGameFlow(db)

@@ -129,6 +129,19 @@ export function getHistory(db: AppDatabase, gameId: string): GameHistory {
     sortOrder: number
   }>
   let rank = 1
+  const memberMap = new Map<string, { members: string[]; performer: string | null }>()
+  const memberRows = db
+    .prepare(
+      `SELECT team_id AS teamId, name, is_performer AS isPerformer FROM game_team_members
+       WHERE game_id = ? ORDER BY sort_order ASC`
+    )
+    .all(gameId) as Array<{ teamId: string; name: string; isPerformer: number }>
+  for (const row of memberRows) {
+    const entry = memberMap.get(row.teamId) ?? { members: [], performer: null }
+    entry.members.push(row.name)
+    if (row.isPerformer === 1) entry.performer = row.name
+    memberMap.set(row.teamId, entry)
+  }
   const ranked = teams.map((team, index) => {
     if (index > 0 && team.totalScore < teams[index - 1].totalScore) rank = index + 1
     const turnCounts = db
@@ -146,7 +159,9 @@ export function getHistory(db: AppDatabase, gameId: string): GameHistory {
       totalScore: team.totalScore,
       rank,
       finishedTurns: turnCounts.finishedTurns ?? 0,
-      notPlayedTurns: turnCounts.notPlayedTurns ?? 0
+      notPlayedTurns: turnCounts.notPlayedTurns ?? 0,
+      members: memberMap.get(team.id)?.members ?? [],
+      performer: memberMap.get(team.id)?.performer ?? null
     }
   })
 
