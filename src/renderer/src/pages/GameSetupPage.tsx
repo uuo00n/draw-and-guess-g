@@ -27,11 +27,12 @@ export function GameSetupPage(): React.JSX.Element {
   useEffect(() => {
     void window.gameAPI.questions.listBanks().then((list) => {
       setBanks(list)
-      if (!store.bankId && list[0]) {
-        store.setBankId(list[0].id)
+      const currentBankId = useGameSetupStore.getState().bankId
+      if (!currentBankId && list[0]) {
+        useGameSetupStore.getState().setBankId(list[0].id)
       }
     })
-  }, [store])
+  }, [])
 
   useEffect(() => {
     if (!store.bankId) {
@@ -39,30 +40,46 @@ export function GameSetupPage(): React.JSX.Element {
       setCategories([])
       return
     }
-    void window.gameAPI.questions
-      .list({ bankId: store.bankId, page: 1, pageSize: 1 })
-      .then((page) => {
-        setCategories(page.categories)
-        return window.gameAPI.questions.list({
-          bankId: store.bankId,
-          category: store.categoryFilter[0],
+    const bankId = store.bankId
+    const categoriesSelected = store.categoryFilter
+    let cancelled = false
+    void (async () => {
+      try {
+        const page = await window.gameAPI.questions.list({
+          bankId,
           page: 1,
-          pageSize: 1
-        })
-      })
-      .then(async () => {
-        const full = await window.gameAPI.questions.list({
-          bankId: store.bankId,
-          page: 1,
-          pageSize: 500,
+          pageSize: 1,
           activeOnly: true
         })
-        const filtered =
-          store.categoryFilter.length === 0
-            ? full.total
-            : full.items.filter((q) => store.categoryFilter.includes(q.category)).length
-        setAvailableCount(filtered)
-      })
+        if (cancelled) return
+        setCategories(page.categories)
+        if (categoriesSelected.length === 0) {
+          setAvailableCount(page.total)
+          return
+        }
+        const counts = await Promise.all(
+          categoriesSelected.map((category) =>
+            window.gameAPI.questions.list({
+              bankId,
+              category,
+              page: 1,
+              pageSize: 1,
+              activeOnly: true
+            })
+          )
+        )
+        if (cancelled) return
+        setAvailableCount(counts.reduce((sum, result) => sum + result.total, 0))
+      } catch (e) {
+        if (!cancelled) {
+          setAvailableCount(0)
+          setError((e as Error).message)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [store.bankId, store.categoryFilter])
 
   const challengeCount = store.teamCount * store.roundCount
