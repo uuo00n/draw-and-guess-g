@@ -1,17 +1,6 @@
 import Papa from 'papaparse'
 import { DEFAULT_CATEGORY, DEFAULT_DIFFICULTY, DEFAULT_POINTS } from '../../shared/constants'
-import type { ParsedImportRow } from './excel-service'
-
-const HEADER_ALIASES: Record<string, keyof Omit<ParsedImportRow, 'rowNumber'>> = {
-  题目: 'text',
-  分类: 'category',
-  难度: 'difficulty',
-  分值: 'points',
-  question: 'text',
-  category: 'category',
-  difficulty: 'difficulty',
-  points: 'points'
-}
+import { resolveImportColumnHeader, type ParsedImportRow } from './excel-service'
 
 export function parseCsvText(text: string): ParsedImportRow[] {
   const parsed = Papa.parse<string[]>(text, {
@@ -26,7 +15,7 @@ export function parseCsvText(text: string): ParsedImportRow[] {
   const header = data[0].map((h) => h.trim())
   const columnMap = new Map<number, keyof Omit<ParsedImportRow, 'rowNumber'>>()
   header.forEach((name, index) => {
-    const mapped = HEADER_ALIASES[name.toLowerCase()] ?? HEADER_ALIASES[name]
+    const mapped = resolveImportColumnHeader(name)
     if (mapped) columnMap.set(index, mapped)
   })
   if (![...columnMap.values()].includes('text')) {

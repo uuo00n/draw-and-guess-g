@@ -20,6 +20,19 @@ const HEADER_ALIASES: Record<string, keyof Omit<ParsedImportRow, 'rowNumber'>> =
   points: 'points'
 }
 
+/** 模板表头为「题目（必填）」等带标注形式，导入时需与 spec §9.1 对齐。 */
+export function resolveImportColumnHeader(
+  header: string
+): keyof Omit<ParsedImportRow, 'rowNumber'> | undefined {
+  const trimmed = header.trim()
+  const direct = HEADER_ALIASES[trimmed.toLowerCase()] ?? HEADER_ALIASES[trimmed]
+  if (direct) return direct
+  const withoutRequiredHint = trimmed.replace(/[（(]必填[）)]/g, '').trim()
+  return (
+    HEADER_ALIASES[withoutRequiredHint.toLowerCase()] ?? HEADER_ALIASES[withoutRequiredHint]
+  )
+}
+
 const DIFFICULTY_ALIASES: Record<string, string> = {
   普通: '普通',
   简单: '简单',
@@ -55,7 +68,7 @@ export async function parseXlsxBuffer(buffer: Buffer): Promise<ParsedImportRow[]
   const columnMap = new Map<number, keyof Omit<ParsedImportRow, 'rowNumber'>>()
   headerRow.eachCell((cell, colNumber) => {
     const header = cellToString(cell.value).trim()
-    const mapped = HEADER_ALIASES[header.toLowerCase()] ?? HEADER_ALIASES[header]
+    const mapped = resolveImportColumnHeader(header)
     if (mapped) {
       columnMap.set(colNumber, mapped)
     }
