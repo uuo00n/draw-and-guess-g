@@ -1,5 +1,5 @@
 appId: com.genpact.draw-and-guess
-productName: 你画我猜
+productName: 'Genpact-draw&guess'
 directories:
   buildResources: build
 files:
@@ -14,7 +14,7 @@ asarUnpack:
   - "**/node_modules/better-sqlite3/**/*.node"
   - "**/*.node"
 win:
-  executableName: draw-and-guess
+  executableName: 'Genpact-draw&guess'
   target:
     - target: nsis
       arch:
@@ -24,8 +24,8 @@ win:
         - x64
 nsis:
   artifactName: ${productName}-${version}-win-x64-Setup.${ext}
-  shortcutName: 你画我猜
-  uninstallDisplayName: 你画我猜
+  shortcutName: 'Genpact-draw&guess'
+  uninstallDisplayName: 'Genpact-draw&guess'
   createDesktopShortcut: always
 portable:
   artifactName: ${productName}-${version}-win-x64-Portable.${ext}
@@ -38,7 +38,7 @@ mac:
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${productName}-${version}.${ext}
 linux:
   target:
     - AppImage
@@ -47,5 +47,5 @@ linux:
   maintainer: electronjs.org
   category: Utility
 appImage:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${productName}-${version}.${ext}
 npmRebuild: false

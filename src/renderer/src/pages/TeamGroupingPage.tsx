@@ -13,7 +13,7 @@ export function TeamGroupingPage(): React.JSX.Element {
   }, [])
 
   return (
-    <PageShell title="比赛分组" subtitle="Genpact Dalian Digital · 只读查看当前分组与规则">
+    <PageShell title="比赛分组" subtitle="Genpact China Digital · 只读查看当前分组与规则">
       <div className="mb-4">
         <Button asChild variant="ghost">
           <Link to="/">返回首页</Link>

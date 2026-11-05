@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs'
+import { APP_DISPLAY_NAME } from '../../shared/constants'
 import type { AppDatabase } from '../database/connection'
 import { getHistory } from './history-service'
 
@@ -9,7 +10,7 @@ function text(value: string | number | null | undefined): string | number {
 export async function buildResultsWorkbook(db: AppDatabase, gameId: string): Promise<Buffer> {
   const history = getHistory(db, gameId)
   const workbook = new ExcelJS.Workbook()
-  workbook.creator = 'draw-and-guess'
+  workbook.creator = APP_DISPLAY_NAME
   workbook.created = new Date()
 
   const overview = workbook.addWorksheet('总览')

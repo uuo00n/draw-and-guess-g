@@ -85,14 +85,14 @@ function GameRulesCard({ roster }: { roster: TeamRoster }): React.JSX.Element {
     <Card className="space-y-4">
       <div>
         <CardTitle>游戏规则</CardTitle>
-        <CardDescription className="mt-2 text-lg text-first-02">
+        <CardDescription className="mt-2 text-lg text-white">
           出场顺序为 {formatGroupRange(roster)}。默认 60 秒说明以创建比赛时冻结的时长为准。
         </CardDescription>
       </div>
       <label className="block space-y-2">
-        <span className="text-sm text-first-03">可直接编辑，每行一条规则</span>
+        <span className="text-sm text-white">可直接编辑，每行一条规则</span>
         <textarea
-          className="min-h-[22rem] w-full resize-y rounded-[12px] border border-line bg-surface px-4 py-3 text-lg leading-relaxed text-first-02 outline-none focus:border-coral md:text-xl"
+          className="w-full resize-none [field-sizing:content] rounded-[12px] border border-line bg-surface px-4 py-3 text-lg leading-relaxed text-white outline-none focus:border-coral md:text-xl"
           value={text}
           onChange={(event) => setText(event.target.value)}
           onBlur={() => setRules(text.split('\n'))}

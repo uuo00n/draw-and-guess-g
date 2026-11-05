@@ -2,6 +2,7 @@ import { dirname, join } from 'node:path'
 import { mkdirSync, readFileSync } from 'node:fs'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { z } from 'zod'
+import { APP_DISPLAY_NAME } from '../../shared/constants'
 import type { AppDatabase } from '../database/connection'
 import { createGameInputSchema } from '../../shared/schemas/games'
 import { teamRosterSchema, validateTeamRoster } from '../../shared/schemas/roster'
@@ -82,7 +83,7 @@ export function registerQuestionHandlers(db: AppDatabase): void {
   ipcMain.handle('questions:exportTemplate', async () => {
     const buffer = await buildTemplateWorkbook()
     const save = await dialog.showSaveDialog({
-      defaultPath: '你画我猜-题库模板.xlsx',
+      defaultPath: `${APP_DISPLAY_NAME}-题库模板.xlsx`,
       filters: [{ name: 'Excel', extensions: ['xlsx'] }]
     })
     if (save.canceled || !save.filePath) return { saved: false }
@@ -293,7 +294,7 @@ export function registerAppHandlers(
 
   ipcMain.handle('app:backupDatabase', async () => {
     const save = await dialog.showSaveDialog({
-      defaultPath: 'draw-and-guess-backup.db',
+      defaultPath: `${APP_DISPLAY_NAME}-backup.db`,
       filters: [{ name: 'SQLite', extensions: ['db'] }]
     })
     if (save.canceled || !save.filePath) return { saved: false }

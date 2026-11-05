@@ -2,14 +2,13 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 describe('Genpact presentation', () => {
-  it('keeps the developer credit exact and out of the click path', () => {
+  it('keeps only the English developer credit in Settings', () => {
     const source = readFileSync('src/renderer/src/components/layout/DeveloperCredit.tsx', 'utf8')
-    const css = readFileSync('src/renderer/src/assets/main.css', 'utf8')
+    const about = readFileSync('src/renderer/src/components/layout/SettingsAboutPanel.tsx', 'utf8')
     expect(source).toContain('Developer: HuangJunbo · Digital Intern')
-    expect(source).toContain('黄俊博 · 数字化实习生')
-    expect(css).toContain('pointer-events: none')
-    expect(css).toContain('font-size: 16px')
-    expect(css).toContain('#adb1ac')
+    expect(source).not.toContain('黄俊博 · 数字化实习生')
+    expect(about).toContain('<DeveloperCreditText />')
+    expect(source).not.toContain('developer-credit')
   })
 
   it('uses a replaceable local logo and a text fallback', () => {

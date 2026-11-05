@@ -40,7 +40,6 @@ export const DEFAULT_POINTS = 1
 export const IMPORT_MAX_BYTES = 5 * 1024 * 1024
 export const IMPORT_MAX_ROWS = 2000
 
-export const APP_VERSION = '1.0.0'
 /** 任务栏、Dock、安装包与窗口标题使用的显示名 */
-export const APP_DISPLAY_NAME = '你画我猜'
-export const APP_WINDOW_TITLE = `${APP_DISPLAY_NAME} · Genpact Dalian Digital`
+export const APP_DISPLAY_NAME = 'Genpact-draw&guess'
+export const APP_WINDOW_TITLE = APP_DISPLAY_NAME

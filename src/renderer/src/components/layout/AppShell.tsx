@@ -1,3 +1,4 @@
+import { APP_DISPLAY_NAME } from '@shared/constants'
 import { GenpactBrand } from '@renderer/components/branding/GenpactBrand'
 import {
   ScrollToTopButton,
@@ -19,7 +20,7 @@ export function AppHeader({
         <GenpactBrand variant="wordmark" height={64} />
         <div className="hidden h-10 w-px bg-first-01 sm:block" />
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold tracking-[0.28em] text-gold">DALIAN DIGITAL</p>
+          <p className="text-[11px] font-semibold tracking-[0.28em] text-gold">CHINA DIGITAL</p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight text-morning lg:text-4xl">
             {title}
           </h1>
@@ -27,8 +28,8 @@ export function AppHeader({
         </div>
       </div>
       <div className="text-right">
-        <div className="text-sm font-semibold tracking-[0.16em] text-morning">DRAW &amp; GUESS</div>
-        <div className="text-xs text-first-03">Genpact Dalian Digital · 你画我猜</div>
+        <div className="text-sm font-semibold tracking-[0.16em] text-morning">{APP_DISPLAY_NAME}</div>
+        <div className="text-xs text-first-03">Genpact China Digital</div>
       </div>
     </header>
   )

@@ -1,11 +1,11 @@
 {
   "name": "draw-and-guess",
   "version": "1.1.0",
-  "description": "Genpact 团建你画我猜桌面程序",
-  "productName": "你画我猜",
+  "description": "Genpact-draw&guess 团建桌面程序",
+  "productName": "Genpact-draw&guess",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "HuangJunbo",
+  "homepage": "https://github.com/uuo00n/draw-and-guess-g",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",

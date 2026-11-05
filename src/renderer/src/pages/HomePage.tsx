@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
+import { APP_DISPLAY_NAME } from '@shared/constants'
 import type { GameSummary } from '@shared/schemas/play'
 import { GenpactBrand } from '@renderer/components/branding/GenpactBrand'
 import { ScrollablePageRoot, StatPill } from '@renderer/components/layout/AppShell'
@@ -44,13 +45,12 @@ export function HomePage(): React.JSX.Element {
         transition={{ duration: 0.35, ease: 'easeOut' }}
       >
         <section className="py-4">
-          <GenpactBrand variant="horizontal" height={64} />
-          <p className="mt-8 text-xs font-semibold tracking-[0.32em] text-gold">DALIAN DIGITAL</p>
-          <h1 className="mt-3 max-w-4xl text-[clamp(3.4rem,6.4vw,6.4rem)] leading-[0.9] font-semibold tracking-[-0.045em] text-morning">
-            DRAW &amp; GUESS
+          <GenpactBrand variant="horizontal" height={200} />
+          <p className="mt-8 text-xs font-semibold tracking-[0.32em] text-gold">CHINA DIGITAL</p>
+          <h1 className="mt-3 max-w-4xl [overflow-wrap:anywhere] text-[clamp(3.4rem,6.4vw,6.4rem)] leading-[0.9] font-semibold tracking-[-0.045em] text-morning">
+            {APP_DISPLAY_NAME}
           </h1>
-          <p className="mt-4 text-2xl text-first-03">你画我猜</p>
-          <p className="mt-3 text-lg text-morning">Genpact Dalian Digital · Team Building</p>
+          <p className="mt-3 text-lg text-morning">Genpact China Digital · Team Building</p>
           <p className="mt-2 text-xs font-semibold tracking-[0.22em] text-first-02">
             TEAM CHALLENGE
           </p>
