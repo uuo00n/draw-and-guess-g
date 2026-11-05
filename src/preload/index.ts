@@ -118,6 +118,7 @@ const gameAPI = {
     setFullscreen: (enabled: boolean): Promise<boolean> =>
       invoke('app:setFullscreen', z.boolean().parse(enabled)),
     toggleFullscreen: (): Promise<boolean> => invoke('app:toggleFullscreen'),
+    resetPageZoom: (): Promise<number> => invoke('app:resetPageZoom'),
     openDataFolder: (): Promise<boolean> => invoke('app:openDataFolder'),
     backupDatabase: (): Promise<{ saved: boolean; path?: string }> =>
       invoke('app:backupDatabase').then((raw) => backupResultSchema.parse(raw)),

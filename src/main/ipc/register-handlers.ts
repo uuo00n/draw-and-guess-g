@@ -263,6 +263,13 @@ export function registerAppHandlers(
     return win.isFullScreen()
   })
 
+  ipcMain.handle('app:resetPageZoom', () => {
+    const win = focusedWindow()
+    if (!win) return 1
+    win.webContents.setZoomFactor(1)
+    return win.webContents.getZoomFactor()
+  })
+
   ipcMain.handle('app:openDataFolder', () => {
     shell.showItemInFolder(options.dbPath)
     return true

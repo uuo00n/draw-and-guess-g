@@ -99,16 +99,30 @@ export function SettingsPage(): React.JSX.Element {
           <CardDescription className="mt-2">
             适合 1920×1080 会场屏幕。F11 同样可以切换全屏。
           </CardDescription>
-          <Button
-            className="mt-4"
-            onClick={() => {
-              const next = !fullscreen
-              setFullscreen(next)
-              void window.gameAPI.app.setFullscreen(next)
-            }}
-          >
-            {fullscreen ? '退出全屏偏好' : '进入全屏'}
-          </Button>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button
+              onClick={() => {
+                const next = !fullscreen
+                setFullscreen(next)
+                void window.gameAPI.app.setFullscreen(next)
+              }}
+            >
+              {fullscreen ? '退出全屏偏好' : '进入全屏'}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                void window.gameAPI.app.resetPageZoom().then(() => {
+                  setNote('界面缩放已恢复为 100%')
+                })
+              }}
+            >
+              恢复 100% 缩放
+            </Button>
+          </div>
+          <p className="mt-3 text-sm text-first-03">
+            误触 ⌘+ / ⌘- 或触控板放大后，可用 ⌘0、上方按钮或 ⌘- 缩回默认比例。
+          </p>
         </Card>
         <Card>
           <CardTitle>分组名单</CardTitle>
