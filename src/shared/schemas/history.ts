@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { uuidSchema } from './common'
+import { teamRosterSchema } from './roster'
 
 export const gameStatusSchema = z.enum([
   'GAME_READY',
@@ -65,7 +66,9 @@ export const historyTeamSchema = z.object({
   totalScore: z.number().int(),
   rank: z.number().int(),
   finishedTurns: z.number().int(),
-  notPlayedTurns: z.number().int()
+  notPlayedTurns: z.number().int(),
+  members: z.array(z.string()),
+  performer: z.string().nullable()
 })
 
 export const historyEventSchema = z.object({
@@ -131,7 +134,19 @@ export const restoreResultSchema = z.object({
   safetyPath: z.string().optional()
 })
 
+export const clearHistoryResultSchema = z.object({
+  deletedCount: z.number().int()
+})
+
+export const replaceRosterResultSchema = z.object({
+  ok: z.boolean(),
+  roster: teamRosterSchema.optional(),
+  error: z.string().optional()
+})
+
 export type HistoryQuery = z.infer<typeof historyQuerySchema>
 export type HistoryListItem = z.infer<typeof historyListItemSchema>
 export type GameHistory = z.infer<typeof gameHistorySchema>
 export type DataInfo = z.infer<typeof dataInfoSchema>
+export type ClearHistoryResult = z.infer<typeof clearHistoryResultSchema>
+export type ReplaceRosterResult = z.infer<typeof replaceRosterResultSchema>

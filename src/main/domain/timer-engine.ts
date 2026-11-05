@@ -22,6 +22,10 @@ export class TimerEngine {
   activeGameIds(): string[] {
     return [...this.sessions.keys()]
   }
+
+  disarmAll(): void {
+    this.sessions.clear()
+  }
 }
 
 export const timerEngine = new TimerEngine()
