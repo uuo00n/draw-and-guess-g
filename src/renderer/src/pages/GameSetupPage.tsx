@@ -2,21 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { GameSnapshot } from '@shared/schemas/games'
 import type { TeamRoster } from '@shared/schemas/roster'
-import { groupDisplayName } from '@shared/schemas/roster'
+import { groupDisplayName, sortGroupsByMemberCountDesc } from '@shared/schemas/roster'
 import type { QuestionBankSummary } from '@shared/schemas/questions'
 import {
   clampTurnDurationSec,
-  ROUND_COUNT_MAX,
-  ROUND_COUNT_MIN,
   TURN_DURATION_SEC_MAX,
   TURN_DURATION_SEC_MIN,
   TURN_DURATION_SEC_STEP
 } from '@shared/constants'
-import {
-  formatMissingPerformerMessage,
-  groupsMissingPerformer
-} from '@shared/roster-performers'
-import { normalizeMemberName } from '@shared/normalize'
 import { PageShell, StatPill } from '@renderer/components/layout/AppShell'
 import { RosterPanels } from '@renderer/components/roster/RosterPanels'
 import { Button } from '@renderer/components/ui/button'
@@ -204,41 +197,27 @@ export function GameSetupPage(): React.JSX.Element {
     }
   }, [store.bankId, store.categoryFilter])
 
-  const groupCount = roster?.groupCount ?? 0
-  const challengeCount = groupCount * store.roundCount
+  const participatingGroups = store.participatingGroupNumbers
+  const participatingCount = participatingGroups.length
+  const challengeCount = participatingCount
 
   const schedulePreview = useMemo(() => {
-    if (!roster) return ''
-    return [...roster.groups]
-      .sort((a, b) => a.group - b.group)
+    if (!roster || participatingGroups.length === 0) return ''
+    const set = new Set(participatingGroups)
+    return sortGroupsByMemberCountDesc(roster.groups.filter((group) => set.has(group.group)))
       .slice(0, 3)
       .map((group) => groupDisplayName(group.group))
       .join(' → ')
-  }, [roster])
+  }, [roster, participatingGroups])
 
   const validateBeforeConfirm = (): string | null => {
     if (!store.bankId) return '请选择题库'
     if (store.categoryFilter.length === 0) return '至少选择一个分类'
     if (availableCount < 1) return '可用题目不足，无法创建比赛'
     if (!roster) return '分组名单尚未加载'
+    if (participatingCount < 1) return '请勾选至少一组本批参赛'
     return null
   }
-
-  const performerAudit = useMemo(() => {
-    if (!roster) return []
-    const performers = new Set(store.performerMembers.map((name) => normalizeMemberName(name)))
-    return [...roster.groups]
-      .sort((a, b) => a.group - b.group)
-      .map((group) => {
-        const performer =
-          group.members.find((member) => performers.has(normalizeMemberName(member))) ?? null
-        return { groupNo: group.group, performer }
-      })
-  }, [roster, store.performerMembers])
-
-  const missingPerformerGroups = roster
-    ? groupsMissingPerformer(roster, store.performerMembers)
-    : []
 
   const openConfirm = (): void => {
     setError(null)
@@ -260,10 +239,9 @@ export function GameSetupPage(): React.JSX.Element {
         commandId: pendingCommandId.current,
         bankId: store.bankId,
         categoryFilter: store.categoryFilter,
-        roundCount: store.roundCount,
         turnDurationSec: store.turnDurationSec,
         scoreMode: 'UNIFORM',
-        performerMembers: store.performerMembers
+        participatingGroupNumbers: participatingGroups
       })
       setCreated(snapshot)
       setConfirmOpen(false)
@@ -302,18 +280,11 @@ export function GameSetupPage(): React.JSX.Element {
           <Card className="space-y-3 p-4">
             <CardTitle>人员名单</CardTitle>
             <p className="text-sm text-first-03">
-              组名、出场顺序和颜色在创建时冻结，不能在这里修改。点击成员可标记「表演题目」（每组最多一位），不会写回分组 JSON。
+              组名、出场顺序和颜色在创建时冻结，不能在这里修改。出场顺序按人数从多到少，不会写回分组 JSON。
             </p>
           </Card>
           {roster ? (
-            <RosterPanels
-              roster={roster}
-              variant="members"
-              performerMembers={store.performerMembers}
-              onTogglePerformer={(member, groupMembers) =>
-                store.togglePerformer(member, groupMembers)
-              }
-            />
+            <RosterPanels roster={roster} variant="members" />
           ) : (
             <p className="text-sm text-first-03">正在加载分组…</p>
           )}
@@ -330,21 +301,9 @@ export function GameSetupPage(): React.JSX.Element {
                 </option>
               ))}
             </Select>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm text-first-03">轮数</label>
-                <Input
-                  type="number"
-                  min={ROUND_COUNT_MIN}
-                  max={ROUND_COUNT_MAX}
-                  value={store.roundCount}
-                  onChange={(e) => store.setRoundCount(Number.parseInt(e.target.value, 10) || 1)}
-                />
-              </div>
-              <div>
-                <label className="text-sm text-first-03">挑战时长（秒）</label>
-                <DurationField />
-              </div>
+            <div>
+              <label className="text-sm text-first-03">挑战时长（秒）</label>
+              <DurationField />
             </div>
             {categories.length > 0 ? (
               <div>
@@ -369,14 +328,54 @@ export function GameSetupPage(): React.JSX.Element {
             ) : null}
           </Card>
 
+          {roster ? (
+            <Card className="space-y-4">
+              <CardTitle>本批参赛组别</CardTitle>
+              <p className="text-sm text-first-03">
+                默认不选组；勾选后这些组才进入本场挑战顺序，未勾选的组本场不排队。可分批创建多场比赛。
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {[...sortGroupsByMemberCountDesc(roster.groups)].map((group) => {
+                    const checked = participatingGroups.includes(group.group)
+                    return (
+                      <label
+                        key={group.group}
+                        className="flex cursor-pointer items-center gap-2 rounded-full border border-first-01 bg-elevated px-3 py-2 text-sm text-morning has-[:checked]:border-coral has-[:checked]:bg-coral/10"
+                      >
+                        <input
+                          type="checkbox"
+                          className="size-4 accent-coral"
+                          checked={checked}
+                          onChange={() => store.toggleParticipatingGroup(group.group)}
+                        />
+                        {groupDisplayName(group.group)}
+                      </label>
+                    )
+                  })}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    store.setParticipatingGroupsAll(roster.groups.map((group) => group.group))
+                  }
+                >
+                  全选
+                </Button>
+              </div>
+            </Card>
+          ) : null}
+
           <div className="grid grid-cols-2 gap-3">
-            <StatPill
-              label="挑战场次"
-              value={`${groupCount} × ${store.roundCount} = ${challengeCount}`}
-            />
+            <StatPill label="挑战场次" value={String(challengeCount)} />
             <StatPill label="可用题目" value={availableCount} />
           </div>
-          <p className="text-sm text-first-03">顺序预览：{schedulePreview} … 每轮重复</p>
+          <p className="text-sm text-first-03">
+            本批顺序预览：{schedulePreview || '—'}
+            {participatingCount > 3 ? ' …' : ''} · 每场一轮
+          </p>
           <Button
             size="lg"
             className="w-full"
@@ -398,39 +397,27 @@ export function GameSetupPage(): React.JSX.Element {
           }}
         >
           <DialogHeader>
-            <DialogTitle>审核表演题目人员</DialogTitle>
+            <DialogTitle>确认创建比赛</DialogTitle>
             <DialogDescription>
-              {groupCount} 组 × {store.roundCount} 轮 = {challengeCount} 场挑战，每场{' '}
-              {store.turnDurationSec} 秒。请确认每组都已勾选表演题目人员后再冻结队列。
+              本批 {participatingCount} 场挑战，每场 {store.turnDurationSec} 秒。出场顺序按人数从多到少，冻结后不可改队列。
             </DialogDescription>
           </DialogHeader>
           <ul className="max-h-64 space-y-2 overflow-y-auto rounded-[12px] border border-line bg-surface p-3 text-sm">
-            {performerAudit.map((row) => {
-              const missing = missingPerformerGroups.includes(row.groupNo)
-              return (
-                <li
-                  key={row.groupNo}
-                  className={missing ? 'text-coral' : 'text-first-03'}
-                >
-                  {groupDisplayName(row.groupNo)}：
-                  {row.performer ? `${row.performer}（表演题目）` : '未勾选'}
-                </li>
-              )
-            })}
+            {roster
+              ? sortGroupsByMemberCountDesc(
+                  roster.groups.filter((group) => participatingGroups.includes(group.group))
+                ).map((group) => (
+                  <li key={group.group} className="text-first-03">
+                    {groupDisplayName(group.group)} · {group.members.length} 人
+                  </li>
+                ))
+              : null}
           </ul>
-          {missingPerformerGroups.length > 0 ? (
-            <StatusNote tone="danger">
-              {formatMissingPerformerMessage(roster!, missingPerformerGroups)}
-            </StatusNote>
-          ) : null}
           <DialogFooter>
             <Button variant="secondary" disabled={creating} onClick={() => setConfirmOpen(false)}>
               返回修改
             </Button>
-            <Button
-              disabled={creating || missingPerformerGroups.length > 0}
-              onClick={() => void runCreate()}
-            >
+            <Button disabled={creating} onClick={() => void runCreate()}>
               {creating ? '正在创建…' : '确认创建'}
             </Button>
           </DialogFooter>

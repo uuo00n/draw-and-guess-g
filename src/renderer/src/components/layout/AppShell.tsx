@@ -14,9 +14,9 @@ export function AppHeader({
   subtitle?: string
 }): React.JSX.Element {
   return (
-    <header className="mb-8 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-5">
+    <header className="flex flex-wrap items-end justify-between gap-4">
       <div className="flex min-w-0 items-center gap-4">
-        <GenpactBrand variant="wordmark" height={48} />
+        <GenpactBrand variant="wordmark" height={64} />
         <div className="hidden h-10 w-px bg-first-01 sm:block" />
         <div className="min-w-0">
           <p className="text-[11px] font-semibold tracking-[0.28em] text-gold">DALIAN DIGITAL</p>

@@ -49,10 +49,14 @@ function seed(
   const dataDir = makeTestDataDir(teamCount)
   const created = createGame(
     db,
-    testCreateInput(imported.bankId, {
-      roundCount: options?.rounds ?? 1,
-      turnDurationSec: options?.seconds ?? 60
-    }),
+    testCreateInput(
+      imported.bankId,
+      {
+        roundCount: options?.rounds ?? 1,
+        turnDurationSec: options?.seconds ?? 60
+      },
+      teamCount
+    ),
     { dataDir }
   )
   return created

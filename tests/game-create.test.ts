@@ -36,13 +36,9 @@ describe('createGame', () => {
     const db = openMemoryDatabase()
     const dataDir = makeTestDataDir(2)
     const bankId = seedBank(db, ['苹果', '香蕉', '橙子', '葡萄', '西瓜'])
-    const snapshot = createGame(
-      db,
-      testCreateInput(bankId, { roundCount: 2 }),
-      { dataDir }
-    )
+    const snapshot = createGame(db, testCreateInput(bankId), { dataDir })
 
-    expect(snapshot.plannedTurnCount).toBe(4)
+    expect(snapshot.plannedTurnCount).toBe(2)
     expect(snapshot.queueSize).toBe(5)
     expect(snapshot.turns[0]?.status).toBe('TURN_READY')
     expect(snapshot.turns[1]?.status).toBe('TURN_PENDING')
@@ -67,6 +63,27 @@ describe('createGame', () => {
         .all(snapshot.id) as Array<{ question_text_snapshot: string }>
     ).map((q) => q.question_text_snapshot)
     expect(after).toEqual(before)
+  })
+
+  it('only includes selected groups in schedule', () => {
+    const db = openMemoryDatabase()
+    const dataDir = makeTestDataDir(4)
+    const bankId = seedBank(db, ['苹果', '香蕉', '橙子'])
+    const snapshot = createGame(
+      db,
+      testCreateInput(
+        bankId,
+        {
+          roundCount: 1,
+          participatingGroupNumbers: [1, 3]
+        },
+        4
+      ),
+      { dataDir }
+    )
+    expect(snapshot.teams).toHaveLength(2)
+    expect(snapshot.plannedTurnCount).toBe(2)
+    expect(snapshot.teams.map((team) => team.name)).toEqual(['第 1 组', '第 3 组'])
   })
 
   it('freezes a 30 second challenge', () => {

@@ -22,6 +22,7 @@ import { useTurnClock } from '@renderer/hooks/useTurnClock'
 import { ChampionMark, useSessionEffects } from '@renderer/hooks/useSessionEffects'
 import { useUiSettings } from '@renderer/stores/ui-settings-store'
 import { cn } from '@renderer/lib/utils'
+import { TURN_SKIP_LIMIT } from '@shared/constants'
 import { formatMembersDisplay } from '@renderer/lib/member-display'
 
 function newCommandId(): string {
@@ -89,7 +90,7 @@ export function GameSessionPage(): React.JSX.Element {
         event.preventDefault()
         void answer('CORRECT')
       }
-      if (event.key === 'ArrowRight' && snapshot.canAnswer) {
+      if (event.key === 'ArrowRight' && snapshot.canSkip) {
         event.preventDefault()
         void answer('SKIPPED')
       }
@@ -126,7 +127,7 @@ export function GameSessionPage(): React.JSX.Element {
         <>
           <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <GenpactBrand variant="wordmark" height={44} />
+              <GenpactBrand variant="wordmark" height={60} />
               <span className="hidden h-7 w-px bg-first-01 sm:block" />
               <p className="min-w-0 text-sm text-first-03 sm:text-base">
                 <span className="text-morning">Genpact Dalian Digital</span>
@@ -236,6 +237,8 @@ export function GameSessionPage(): React.JSX.Element {
               冠军{' '}
               {current.leaderboard.find((team) => team.teamId === current.championTeamId)?.name}
             </p>
+          ) : current.scoreTiedForLead ? (
+            <p className="mt-4 text-center text-xl font-semibold text-gold">分数并列，请双方加时。</p>
           ) : (
             <p className="mt-4 text-center text-first-03">本场不授予冠军</p>
           )}
@@ -284,7 +287,6 @@ export function GameSessionPage(): React.JSX.Element {
       const seconds = Math.round(current.turnDurationMs / 1000)
       const team = current.teams.find((item) => item.id === current.currentTurn?.teamId)
       const members = team?.members ?? []
-      const performer = team?.performer ?? null
       return (
         <div className="mx-auto flex max-w-4xl flex-1 flex-col items-center justify-center text-center">
           <p className="text-xs font-semibold tracking-[0.22em] text-gold">
@@ -294,9 +296,7 @@ export function GameSessionPage(): React.JSX.Element {
             下一位：{current.currentTurn?.teamName}
           </h2>
           {members.length > 0 ? (
-            <p className="mt-4 max-w-3xl text-lg text-first-03">
-              {formatMembersDisplay(members, performer)}
-            </p>
+            <p className="mt-4 max-w-3xl text-lg text-first-03">{formatMembersDisplay(members)}</p>
           ) : null}
           <p className="mt-4 text-first-03">准备页不展示题目。主持人确认后才开始计时。</p>
           <Button
@@ -386,10 +386,13 @@ export function GameSessionPage(): React.JSX.Element {
           <Button
             size="lg"
             variant="secondary"
-            disabled={!current.canAnswer || pending}
+            disabled={!current.canSkip || pending}
             onClick={() => void answer('SKIPPED')}
           >
             跳过 →
+            {current.currentTurn && current.currentTurn.skipCount >= 0
+              ? ` (${current.currentTurn.skipCount}/${TURN_SKIP_LIMIT})`
+              : ''}
           </Button>
           {current.canPause ? (
             <Button

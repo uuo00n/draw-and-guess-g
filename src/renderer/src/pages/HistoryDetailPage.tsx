@@ -92,11 +92,7 @@ export function HistoryDetailPage(): React.JSX.Element {
                 </div>
                 {team.members.length > 0 ? (
                   <p className="mt-2 text-sm text-first-03">
-                    {team.members
-                      .map((member) =>
-                        team.performer === member ? `${member}（表演题目）` : member
-                      )
-                      .join('、')}
+                    {team.members.join('、')}
                   </p>
                 ) : null}
                 <p className="mt-1 text-sm text-first-03">

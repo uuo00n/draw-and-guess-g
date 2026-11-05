@@ -36,6 +36,9 @@ const VARIANT_FILES = {
   icon: ['genpact-icon-white.png', 'genpact-logo.svg', 'genpact-logo.png']
 } as const
 
+/** 相对各页面传入的 height 统一放大 10%，避免多处改数值。 */
+const BRAND_DISPLAY_SCALE = 1.1
+
 export type GenpactBrandVariant = keyof typeof VARIANT_FILES
 
 function assetUrl(fileName: string): string | null {
@@ -62,9 +65,14 @@ export function GenpactBrand({
   height?: number
   className?: string
 }): React.JSX.Element {
+  const displayHeight = Math.round(height * BRAND_DISPLAY_SCALE)
   const src = resolveBrandSrc(variant)
-  if (!src) return <BrandFallback surface={surface} height={height} className={className} />
-  return <BrandImage src={src} height={height} surface={surface} className={className} />
+  if (!src) {
+    return <BrandFallback surface={surface} height={displayHeight} className={className} />
+  }
+  return (
+    <BrandImage src={src} height={displayHeight} surface={surface} className={className} />
+  )
 }
 
 function BrandImage({

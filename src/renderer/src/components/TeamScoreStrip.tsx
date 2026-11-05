@@ -28,7 +28,6 @@ export function TeamScoreStrip({ snapshot }: { snapshot: PlaySnapshot }): React.
         {teams.map((team) => {
           const active = team.teamId === currentId
           const members = teamById.get(team.teamId)?.members ?? []
-          const performer = teamById.get(team.teamId)?.performer ?? null
           return (
             <div
               key={team.teamId}
@@ -63,7 +62,7 @@ export function TeamScoreStrip({ snapshot }: { snapshot: PlaySnapshot }): React.
               </div>
               {active && members.length > 0 ? (
                 <p className="mt-1 text-[10px] leading-snug text-first-03">
-                  {formatMembersDisplay(members, performer)}
+                  {formatMembersDisplay(members)}
                 </p>
               ) : null}
               <div className="mt-1 text-lg font-semibold text-gold tabular-nums xl:text-xl">
@@ -75,7 +74,7 @@ export function TeamScoreStrip({ snapshot }: { snapshot: PlaySnapshot }): React.
       </div>
       {currentTeam && currentMembers.length > 0 ? (
         <p className="text-center text-xs text-first-03 xl:hidden">
-          当前：{currentTeam.name} · {formatMembersDisplay(currentMembers, currentTeam.performer)}
+          当前：{currentTeam.name} · {formatMembersDisplay(currentMembers)}
         </p>
       ) : null}
     </div>

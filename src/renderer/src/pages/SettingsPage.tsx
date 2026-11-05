@@ -68,7 +68,7 @@ export function SettingsPage(): React.JSX.Element {
 
   return (
     <PageShell title="设置" subtitle="Genpact Dalian Digital · 音效、投影和数据库都留在本机。">
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_min(100%,20rem)] lg:items-start xl:max-w-6xl">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start xl:max-w-6xl">
         <div className="grid max-w-3xl gap-6">
         <Card>
           <CardTitle>音效与动效</CardTitle>

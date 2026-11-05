@@ -71,21 +71,27 @@ export function groupDisplayName(groupNo: number): string {
   return `第 ${groupNo} 组`
 }
 
+export function sortGroupsByMemberCountDesc<T extends { group: number; members: string[] }>(
+  groups: T[]
+): T[] {
+  return [...groups].sort(
+    (a, b) => b.members.length - a.members.length || a.group - b.group
+  )
+}
+
 export function formatGroupRange(roster: TeamRoster): string {
-  const sorted = [...roster.groups].sort((a, b) => a.group - b.group)
-  const first = sorted[0]?.group
-  const last = sorted[sorted.length - 1]?.group
-  if (first == null || last == null) return ''
-  if (first === last) return groupDisplayName(first)
-  return `${groupDisplayName(first)}到${groupDisplayName(last)}`
+  const sorted = sortGroupsByMemberCountDesc(roster.groups)
+  if (sorted.length === 0) return ''
+  if (sorted.length === 1) return groupDisplayName(sorted[0].group)
+  return sorted.map((group) => groupDisplayName(group.group)).join(' → ')
 }
 
 export const GAME_RULE_BULLETS = [
   '单屏公开出题。题目直接显示在大屏上。猜题的人不要看屏幕，画画的人看屏幕。',
   '一次只有一组在挑战，不会两组同时计时。',
-  '出场顺序按组号从小到大，每轮重复。人数不同的组规则相同。',
-  '每组每轮单独计时，默认 60 秒。答对或跳过立刻换下一题，剩余时间不重置。',
-  '答对加 1 分。跳过不加分。时间到 0 时，当前这题记为超时，不能再加分。',
+  '出场顺序按人数从多到少；人数相同则按组号从小到大。每场默认一轮。',
+  '每组单独计时，默认 60 秒。答对或跳过立刻换下一题，剩余时间不重置。',
+  '答对加 1 分。跳过不加分。每组每场最多跳过 5 次。时间到 0 时，当前这题记为超时，不能再加分。',
   '本组结束后停在结算页。下一组要等主持人在准备页手动开始。',
   '同一场比赛里，同一道题只会第一次抽出一次。跳过、超时和作废的题都不会回到题库。',
   '题目用完时，本场提前结束，不授冠军。只有全部计划挑战都按时结束，才是正常结束。',

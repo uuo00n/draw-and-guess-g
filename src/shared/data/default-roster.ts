@@ -9,9 +9,9 @@ export const DEFAULT_ROSTER: TeamRoster = {
     { group: 2, members: ['田静', '董楠', '刘梓狄', '卜天佐'] },
     { group: 3, members: ['吴越', '陈栋', '徐春鑫', '于宗滨', '黄州锦'] },
     { group: 4, members: ['黄俊博', '蔡华', '周骏', '王佳琪'] },
-    { group: 5, members: ['曲日鑫', '郎鹏举', '金婧', '马振', '陈金华'] },
+    { group: 5, members: ['曲日鑫', '郎鹏举', '金婧', '姚子琦', '陈金华'] },
     { group: 6, members: ['傅文涛', '黄静', '贾巍', '刘维峰'] },
     { group: 7, members: ['马传开', '张晟瑜', '王蒿', '刘同霞', '刘争艳'] },
-    { group: 8, members: ['谭明', '李明', '孙茂军', '姚子琦'] }
+    { group: 8, members: ['谭明', '李明', '孙茂军', '马振'] }
   ]
 }

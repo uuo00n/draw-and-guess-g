@@ -1,5 +1,4 @@
 import { AppRouter } from '@renderer/app/router'
-import { DeveloperCredit } from '@renderer/components/layout/DeveloperCredit'
 import { useUiSettings } from '@renderer/stores/ui-settings-store'
 import { useEffect } from 'react'
 
@@ -25,7 +24,6 @@ function App(): React.JSX.Element {
   return (
     <div className="gp-stage flex min-h-screen flex-col">
       <AppRouter />
-      <DeveloperCredit />
     </div>
   )
 }

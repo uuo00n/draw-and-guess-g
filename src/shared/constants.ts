@@ -8,7 +8,9 @@ export const TURN_DURATION_SEC_MIN = TURN_DURATION_MS_MIN / 1000
 export const TURN_DURATION_SEC_MAX = TURN_DURATION_MS_MAX / 1000
 export const TURN_DURATION_SEC_STEP = 10
 export const DEFAULT_TEAM_COUNT = 4
-export const DEFAULT_ROUND_COUNT = 3
+export const DEFAULT_ROUND_COUNT = 1
+export const FIXED_ROUND_COUNT = 1
+export const TURN_SKIP_LIMIT = 5
 export const DEFAULT_TURN_DURATION_SEC = 60
 
 export function clampTurnDurationSec(value: number): number {

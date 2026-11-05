@@ -128,8 +128,15 @@ body {
 }
 
 .app-shell__pin {
-  background: color-mix(in srgb, var(--gp-midnight) 92%, transparent);
-  backdrop-filter: blur(10px);
+  margin-bottom: 1rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--gp-line);
+  border-radius: var(--radius-card);
+  background: color-mix(in srgb, var(--gp-surface) 92%, var(--gp-midnight));
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
 }
 
 .scroll-to-top {
@@ -156,6 +163,10 @@ body {
   letter-spacing: 0.01em;
   text-align: right;
   opacity: 0.92;
+}
+
+.developer-credit p {
+  margin: 0;
 }
 
 .gp-note {

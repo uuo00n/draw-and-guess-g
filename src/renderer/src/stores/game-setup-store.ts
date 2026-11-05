@@ -1,39 +1,28 @@
-import {
-  DEFAULT_ROUND_COUNT,
-  DEFAULT_TURN_DURATION_SEC,
-  ROUND_COUNT_MAX,
-  ROUND_COUNT_MIN
-} from '@shared/constants'
+import { DEFAULT_TURN_DURATION_SEC } from '@shared/constants'
 import { clampTurnDurationSec } from '@shared/constants'
-import { normalizeMemberName } from '@shared/normalize'
 import { create } from 'zustand'
 
 type GameSetupState = {
   bankId: string | null
-  roundCount: number
   turnDurationSec: number
   categoryFilter: string[]
-  performerMembers: string[]
+  /** 默认空；仅勾选的组号同批参赛 */
+  participatingGroupNumbers: number[]
   setBankId: (bankId: string) => void
-  setRoundCount: (count: number) => void
   setTurnDurationSec: (seconds: number) => void
   setCategoryFilterAll: (categories: string[]) => void
   toggleCategory: (category: string) => void
-  togglePerformer: (memberName: string, groupMemberNames: string[]) => void
-  resetPerformers: () => void
+  setParticipatingGroupsAll: (groupNumbers: number[]) => void
+  toggleParticipatingGroup: (groupNo: number) => void
 }
 
 export const useGameSetupStore = create<GameSetupState>((set, get) => ({
   bankId: null,
-  roundCount: DEFAULT_ROUND_COUNT,
   turnDurationSec: DEFAULT_TURN_DURATION_SEC,
   categoryFilter: [],
-  performerMembers: [],
-  setBankId: (bankId) => set({ bankId, categoryFilter: [], performerMembers: [] }),
-  setRoundCount: (count) =>
-    set({
-      roundCount: Math.min(ROUND_COUNT_MAX, Math.max(ROUND_COUNT_MIN, count))
-    }),
+  participatingGroupNumbers: [],
+  setBankId: (bankId) =>
+    set({ bankId, categoryFilter: [], participatingGroupNumbers: [] }),
   setTurnDurationSec: (seconds) => set({ turnDurationSec: clampTurnDurationSec(seconds) }),
   setCategoryFilterAll: (categories) => set({ categoryFilter: [...categories] }),
   toggleCategory: (category) => {
@@ -44,22 +33,18 @@ export const useGameSetupStore = create<GameSetupState>((set, get) => ({
         : [...current, category]
     })
   },
-  togglePerformer: (memberName, groupMemberNames) => {
-    const normalized = normalizeMemberName(memberName)
-    const groupSet = new Set(groupMemberNames.map((name) => normalizeMemberName(name)))
-    const current = get().performerMembers.map((name) => normalizeMemberName(name))
-    if (current.includes(normalized)) {
+  setParticipatingGroupsAll: (groupNumbers) =>
+    set({ participatingGroupNumbers: [...groupNumbers].sort((a, b) => a - b) }),
+  toggleParticipatingGroup: (groupNo) => {
+    const current = get().participatingGroupNumbers
+    if (current.includes(groupNo)) {
       set({
-        performerMembers: current.filter((name) => name !== normalized)
+        participatingGroupNumbers: current.filter((no) => no !== groupNo)
       })
       return
     }
     set({
-      performerMembers: [
-        ...current.filter((name) => !groupSet.has(name)),
-        normalized
-      ]
+      participatingGroupNumbers: [...current, groupNo].sort((a, b) => a - b)
     })
-  },
-  resetPerformers: () => set({ performerMembers: [] })
+  }
 }))

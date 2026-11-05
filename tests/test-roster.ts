@@ -20,16 +20,17 @@ export function makeTestDataDir(groupCount = 2): string {
 
 export function testCreateInput(
   bankId: string,
-  overrides: Partial<CreateGameInput> = {}
+  overrides: Partial<CreateGameInput> = {},
+  groupCount = 2
 ): CreateGameInput {
+  const allGroups = Array.from({ length: groupCount }, (_, index) => index + 1)
   return {
     commandId: randomUUID(),
     bankId,
     categoryFilter: ['测试'],
-    roundCount: 1,
     turnDurationSec: 60,
     scoreMode: 'UNIFORM',
-    performerMembers: [],
+    participatingGroupNumbers: allGroups,
     ...overrides
   }
 }

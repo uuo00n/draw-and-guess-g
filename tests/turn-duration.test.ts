@@ -12,7 +12,8 @@ describe('turn duration bounds', () => {
         commandId: randomUUID(),
         bankId,
         categoryFilter: ['测试'],
-        turnDurationSec: 30
+        turnDurationSec: 30,
+        participatingGroupNumbers: [1]
       }).success
     ).toBe(true)
     expect(

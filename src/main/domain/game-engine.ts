@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
+import { TURN_SKIP_LIMIT } from '../../shared/constants'
 import type {
   AbortGameInput,
   GameCommandInput,
@@ -489,6 +490,20 @@ export function submitAnswer(
         rejectReason: 'STALE'
       })
       return resultOf(db, input.gameId, timer, now, false, undefined, 'STALE')
+    }
+    if (input.verdict === 'SKIPPED') {
+      const skipRow = db
+        .prepare(
+          `SELECT COUNT(*) AS c FROM answer_events e
+           WHERE e.turn_id = ? AND e.action = 'SKIPPED'
+             AND NOT EXISTS (
+               SELECT 1 FROM answer_events u WHERE u.reverts_event_id = e.id
+             )`
+        )
+        .get(turn.id) as { c: number }
+      if (Number(skipRow.c) >= TURN_SKIP_LIMIT) {
+        throw new GameCommandError(`每组每场最多跳过 ${TURN_SKIP_LIMIT} 次`, 'INVALID_STATE')
+      }
     }
     const delta =
       input.verdict === 'CORRECT'

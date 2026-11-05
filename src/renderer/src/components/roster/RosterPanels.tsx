@@ -1,43 +1,37 @@
+import { useEffect, useState } from 'react'
 import type { TeamRoster } from '@shared/schemas/roster'
-import {
-  GAME_RULE_BULLETS,
-  formatGroupRange,
-  groupDisplayName
-} from '@shared/schemas/roster'
+import { formatGroupRange, groupDisplayName, sortGroupsByMemberCountDesc } from '@shared/schemas/roster'
 import { TEAM_PALETTE } from '@shared/constants'
+import { Button } from '@renderer/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@renderer/components/ui/card'
 import { cn } from '@renderer/lib/utils'
-import { normalizeMemberName } from '@shared/normalize'
+import { useGameRulesStore } from '@renderer/stores/game-rules-store'
 
 type RosterPanelsProps = {
   roster: TeamRoster
   className?: string
-  performerMembers?: string[]
-  onTogglePerformer?: (memberName: string, groupMemberNames: string[]) => void
   variant?: 'full' | 'members'
 }
 
 export function RosterPanels({
   roster,
   className,
-  performerMembers = [],
-  onTogglePerformer,
   variant = 'full'
 }: RosterPanelsProps): React.JSX.Element {
-  const performers = new Set(performerMembers.map((name) => normalizeMemberName(name)))
-  const sorted = [...roster.groups].sort((a, b) => a.group - b.group)
+  const sorted = sortGroupsByMemberCountDesc(roster.groups)
 
   const membersCard = (
     <Card className="space-y-4">
       <div>
         <CardTitle>人员分组</CardTitle>
         <CardDescription className="mt-2">
-          共 {roster.total} 人 · {roster.groupCount} 组
+          共 {roster.total} 人 · {roster.groupCount} 组 · 按人数从多到少排列
         </CardDescription>
       </div>
       <div className="space-y-3">
-        {sorted.map((group, index) => {
-          const color = TEAM_PALETTE[index % TEAM_PALETTE.length]
+        {sorted.map((group) => {
+          const paletteIndex = roster.groups.findIndex((item) => item.group === group.group)
+          const color = TEAM_PALETTE[paletteIndex % TEAM_PALETTE.length]
           return (
             <div
               key={group.group}
@@ -49,35 +43,14 @@ export function RosterPanels({
                 <span className="text-xs text-first-03">{group.members.length} 人</span>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
-                {group.members.map((member) => {
-                  const normalized = normalizeMemberName(member)
-                  const isPerformer = performers.has(normalized)
-                  if (onTogglePerformer) {
-                    return (
-                      <button
-                        key={member}
-                        type="button"
-                        onClick={() => onTogglePerformer(member, group.members)}
-                        className={cn(
-                          'rounded-full border px-3 py-1 text-sm transition-colors',
-                          isPerformer
-                            ? 'border-coral bg-coral/15 font-semibold text-morning'
-                            : 'border-first-01 bg-elevated text-morning hover:border-coral/50'
-                        )}
-                      >
-                        {isPerformer ? `${member} · 表演题目` : member}
-                      </button>
-                    )
-                  }
-                  return (
-                    <span
-                      key={member}
-                      className="rounded-full border border-first-01 bg-elevated px-3 py-1 text-sm text-morning"
-                    >
-                      {member}
-                    </span>
-                  )
-                })}
+                {group.members.map((member) => (
+                  <span
+                    key={member}
+                    className="rounded-full border border-first-01 bg-elevated px-3 py-1 text-sm text-morning"
+                  >
+                    {member}
+                  </span>
+                ))}
               </div>
             </div>
           )
@@ -92,20 +65,44 @@ export function RosterPanels({
 
   return (
     <div className={cn('grid gap-6 xl:grid-cols-2', className)}>
-      <Card className="space-y-4">
-        <div>
-          <CardTitle>游戏规则</CardTitle>
-          <CardDescription className="mt-2">
-            出场顺序为 {formatGroupRange(roster)}，每轮重复。默认 60 秒说明以创建比赛时冻结的时长为准。
-          </CardDescription>
-        </div>
-        <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed text-first-03">
-          {GAME_RULE_BULLETS.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ol>
-      </Card>
+      <GameRulesCard roster={roster} />
       {membersCard}
     </div>
+  )
+}
+
+function GameRulesCard({ roster }: { roster: TeamRoster }): React.JSX.Element {
+  const rules = useGameRulesStore((state) => state.rules)
+  const setRules = useGameRulesStore((state) => state.setRules)
+  const resetRules = useGameRulesStore((state) => state.resetRules)
+  const [text, setText] = useState(rules.join('\n'))
+
+  useEffect(() => {
+    setText(rules.join('\n'))
+  }, [rules])
+
+  return (
+    <Card className="space-y-4">
+      <div>
+        <CardTitle>游戏规则</CardTitle>
+        <CardDescription className="mt-2 text-lg text-first-02">
+          出场顺序为 {formatGroupRange(roster)}。默认 60 秒说明以创建比赛时冻结的时长为准。
+        </CardDescription>
+      </div>
+      <label className="block space-y-2">
+        <span className="text-sm text-first-03">可直接编辑，每行一条规则</span>
+        <textarea
+          className="min-h-[22rem] w-full resize-y rounded-[12px] border border-line bg-surface px-4 py-3 text-lg leading-relaxed text-first-02 outline-none focus:border-coral md:text-xl"
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          onBlur={() => setRules(text.split('\n'))}
+        />
+      </label>
+      <div>
+        <Button type="button" variant="secondary" size="sm" onClick={resetRules}>
+          恢复默认规则
+        </Button>
+      </div>
+    </Card>
   )
 }

@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { TURN_SKIP_LIMIT } from '../../shared/constants'
 import type { PlayPhase, PlaySnapshot } from '../../shared/schemas/play'
 import { loadGameSnapshot } from './game-create'
 import {
@@ -126,6 +127,8 @@ export function loadPlaySnapshot(
   const topScore = leaderboard[0]?.totalScore ?? 0
   const topCount = leaderboard.filter((entry) => entry.totalScore === topScore).length
   const showChampion = game.status === 'GAME_FINISHED' && topCount === 1 && leaderboard.length > 0
+  const scoreTiedForLead =
+    (game.status === 'GAME_FINISHED' || game.status === 'GAME_FINISHED_EARLY') && topCount > 1
   const pendingNext = turn
     ? Number(
         (
@@ -163,6 +166,8 @@ export function loadPlaySnapshot(
     !latestReverted &&
     latest?.queue_item_id !== currentQuestion?.queueItemId
 
+  const skipCount = turn ? countAction(db, turn.id, 'SKIPPED') : 0
+
   return {
     ...base,
     endReason: game.end_reason,
@@ -179,7 +184,7 @@ export function loadPlaySnapshot(
           turnScore: turn.turn_score,
           endReason: turn.end_reason,
           correctCount: countAction(db, turn.id, 'CORRECT'),
-          skipCount: countAction(db, turn.id, 'SKIPPED'),
+          skipCount,
           timeoutCount: countAction(db, turn.id, 'TIMEOUT')
         }
       : null,
@@ -189,11 +194,18 @@ export function loadPlaySnapshot(
     recoveryReason: lock?.reason ?? null,
     leaderboard,
     showChampion,
+    scoreTiedForLead,
     championTeamId: showChampion ? (leaderboard[0]?.teamId ?? null) : null,
     canStart:
       !lock && phase === 'ready' && unusedCount > 0 && !TERMINAL_GAME.has(game.status),
     canAdvance: !lock && phase === 'turn-result' && pendingNext > 0 && game.status === 'GAME_ACTIVE',
     canAnswer: !lock && phase === 'running' && Boolean(currentQuestion) && remainingMs > 0,
+    canSkip:
+      !lock &&
+      phase === 'running' &&
+      Boolean(currentQuestion) &&
+      remainingMs > 0 &&
+      skipCount < TURN_SKIP_LIMIT,
     canPause: !lock && phase === 'running',
     canResume: !lock && phase === 'paused',
     canUndo,

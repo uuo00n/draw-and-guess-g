@@ -5,6 +5,7 @@ import { TEAM_PALETTE } from '../../shared/constants'
 import { normalizeMemberName } from '../../shared/normalize'
 import {
   groupDisplayName,
+  sortGroupsByMemberCountDesc,
   validateTeamRoster,
   type TeamRoster,
   RosterValidationError
@@ -45,44 +46,48 @@ export type ResolvedTeam = {
   name: string
   color: string
   sortOrder: number
-  members: Array<{ name: string; sortOrder: number; isPerformer: boolean }>
+  members: Array<{ name: string; sortOrder: number }>
 }
 
 export function resolveTeamsForGame(
   roster: TeamRoster,
-  performerMembers: string[]
+  participatingGroupNumbers: number[]
 ): ResolvedTeam[] {
-  const performers = new Set(performerMembers.map((name) => normalizeMemberName(name)))
   const sorted = [...roster.groups].sort((a, b) => a.group - b.group)
-  const teams: ResolvedTeam[] = []
-  sorted.forEach((group, index) => {
-    const members = group.members.map((name, sortOrder) => {
-      const normalized = normalizeMemberName(name)
-      return { name: normalized, sortOrder, isPerformer: performers.has(normalized) }
-    })
-    const performerCount = members.filter((member) => member.isPerformer).length
-    if (performerCount > 1) {
-      throw new RosterValidationError(
-        `${groupDisplayName(group.group)} 只能标记一位表演题目`
-      )
+  const rosterGroupNos = new Set(sorted.map((group) => group.group))
+  const participating = participatingGroupNumbers
+  const participatingSet = new Set(participating)
+  for (const groupNo of participating) {
+    if (!rosterGroupNos.has(groupNo)) {
+      throw new RosterValidationError(`参赛组号无效：${groupDisplayName(groupNo)}`)
     }
+  }
+  if (participatingSet.size !== participating.length) {
+    throw new RosterValidationError('参赛组号不能重复')
+  }
+  const filtered = sortGroupsByMemberCountDesc(
+    sorted.filter((group) => participatingSet.has(group.group))
+  )
+  if (filtered.length === 0) {
+    throw new RosterValidationError('至少选择一组参赛')
+  }
+
+  const paletteIndexByGroup = new Map(sorted.map((group, index) => [group.group, index]))
+  const teams: ResolvedTeam[] = []
+  filtered.forEach((group, index) => {
+    const paletteIndex = paletteIndexByGroup.get(group.group) ?? index
+    const members = group.members.map((name, sortOrder) => ({
+      name: normalizeMemberName(name),
+      sortOrder
+    }))
     teams.push({
       groupNo: group.group,
       name: groupDisplayName(group.group),
-      color: TEAM_PALETTE[index % TEAM_PALETTE.length],
+      color: TEAM_PALETTE[paletteIndex % TEAM_PALETTE.length],
       sortOrder: index,
       members
     })
   })
-
-  const rosterNames = new Set(
-    sorted.flatMap((group) => group.members.map((name) => normalizeMemberName(name)))
-  )
-  for (const marked of performers) {
-    if (!rosterNames.has(marked)) {
-      throw new RosterValidationError(`表演题目标记无效：${marked}`)
-    }
-  }
 
   return teams
 }

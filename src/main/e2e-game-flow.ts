@@ -64,11 +64,10 @@ function makeGame(db: AppDatabase, texts: string[], name: string) {
       commandId: randomUUID(),
       name,
       bankId: imported.bankId,
-      roundCount: 1,
       turnDurationSec: 60,
       scoreMode: 'UNIFORM',
       categoryFilter: ['烟测'],
-      performerMembers: []
+      participatingGroupNumbers: [1, 2]
     },
     { dataDir: e2eDataDir() }
   )

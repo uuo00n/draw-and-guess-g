@@ -1,12 +1,5 @@
 import { z } from 'zod'
-import {
-  DEFAULT_ROUND_COUNT,
-  DEFAULT_TURN_DURATION_SEC,
-  ROUND_COUNT_MAX,
-  ROUND_COUNT_MIN,
-  TURN_DURATION_SEC_MAX,
-  TURN_DURATION_SEC_MIN
-} from '../constants'
+import { DEFAULT_TURN_DURATION_SEC, TURN_DURATION_SEC_MAX, TURN_DURATION_SEC_MIN } from '../constants'
 import { uuidSchema } from './common'
 
 export const scoreModeSchema = z.enum(['UNIFORM', 'QUESTION_POINTS'])
@@ -27,12 +20,6 @@ export const createGameInputSchema = z
     name: z.string().trim().max(120).optional(),
     bankId: uuidSchema,
     categoryFilter: z.array(z.string()).min(1, '至少选择一个分类'),
-    roundCount: z
-      .number()
-      .int()
-      .min(ROUND_COUNT_MIN)
-      .max(ROUND_COUNT_MAX)
-      .default(DEFAULT_ROUND_COUNT),
     turnDurationSec: z
       .number()
       .int()
@@ -40,12 +27,18 @@ export const createGameInputSchema = z
       .max(TURN_DURATION_SEC_MAX)
       .default(DEFAULT_TURN_DURATION_SEC),
     scoreMode: scoreModeSchema.default('UNIFORM'),
-    performerMembers: z.array(z.string()).default([])
+    participatingGroupNumbers: z
+      .array(z.number().int().positive())
+      .min(1, '至少选择一组参赛')
   })
   .superRefine((value, ctx) => {
-    const normalized = value.performerMembers.map((name) => name.trim()).filter(Boolean)
-    if (new Set(normalized).size !== normalized.length) {
-      ctx.addIssue({ code: 'custom', message: '表演题目标记不能重复', path: ['performerMembers'] })
+    const groups = value.participatingGroupNumbers
+    if (groups.length > 0 && new Set(groups).size !== groups.length) {
+      ctx.addIssue({
+        code: 'custom',
+        message: '参赛组号不能重复',
+        path: ['participatingGroupNumbers']
+      })
     }
   })
 

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import type { CreateGameInput, GameSnapshot } from '../../shared/schemas/games'
+import { FIXED_ROUND_COUNT } from '../../shared/constants'
 import { buildChallengeSchedule, shuffleInPlace } from './challenge-schedule'
 import { loadCurrentRoster, resolveTeamsForGame, RosterValidationError } from '../services/roster-service'
 
@@ -73,7 +74,7 @@ export function createGame(
   let resolvedTeams
   try {
     const roster = loadCurrentRoster(options.dataDir)
-    resolvedTeams = resolveTeamsForGame(roster, input.performerMembers)
+    resolvedTeams = resolveTeamsForGame(roster, input.participatingGroupNumbers)
   } catch (error) {
     if (error instanceof RosterValidationError) {
       throw new GameCreateError(error.message, 'INVALID_CONFIG')
@@ -103,7 +104,7 @@ export function createGame(
 
   const schedule = buildChallengeSchedule(
     teamIds.map((id, index) => ({ teamId: id, sortOrder: resolvedTeams[index].sortOrder })),
-    input.roundCount
+    FIXED_ROUND_COUNT
   )
   const plannedTurnCount = schedule.length
 
@@ -168,7 +169,7 @@ export function createGame(
     insertGame.run({
       id: gameId,
       name: gameName,
-      roundCount: input.roundCount,
+      roundCount: FIXED_ROUND_COUNT,
       turnDurationMs,
       scoreMode: input.scoreMode,
       bankId: input.bankId,
@@ -192,7 +193,7 @@ export function createGame(
           teamId,
           sortOrder: member.sortOrder,
           name: member.name,
-          isPerformer: member.isPerformer ? 1 : 0
+          isPerformer: 0
         })
       }
     })
