@@ -1,8 +1,8 @@
 import Database from 'better-sqlite3'
 import { MIGRATION_V1 } from './migrations/001_initial'
 import { MIGRATION_V2 } from './migrations/002_command_receipts'
-
-const CURRENT_VERSION = 2
+import { MIGRATION_V3 } from './migrations/003_team_roster'
+import { MIGRATION_V4 } from './migrations/004_member_performer'
 
 export type AppDatabase = Database.Database
 
@@ -33,13 +33,30 @@ export function migrate(db: AppDatabase): void {
       db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (1, ?)').run(now)
     })()
   }
-  if (current < CURRENT_VERSION) {
+  if (current < 2) {
     db.transaction(() => {
       db.exec(MIGRATION_V2)
-      db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)').run(
-        CURRENT_VERSION,
-        now
-      )
+      db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (2, ?)').run(now)
+    })()
+  }
+  const rowAfterV2 = db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as
+    | { version: number | null }
+    | undefined
+  const versionNow = rowAfterV2?.version ?? 0
+  if (versionNow < 3) {
+    db.transaction(() => {
+      db.exec(MIGRATION_V3)
+      db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (3, ?)').run(now)
+    })()
+  }
+  const rowAfterV3 = db.prepare('SELECT MAX(version) AS version FROM schema_migrations').get() as
+    | { version: number | null }
+    | undefined
+  const versionAfterV3 = rowAfterV3?.version ?? 0
+  if (versionAfterV3 < 4) {
+    db.transaction(() => {
+      db.exec(MIGRATION_V4)
+      db.prepare('INSERT INTO schema_migrations (version, applied_at) VALUES (4, ?)').run(now)
     })()
   }
 }
