@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { motion, useReducedMotion } from 'motion/react'
 import type { GameSummary } from '@shared/schemas/play'
 import { GenpactBrand } from '@renderer/components/branding/GenpactBrand'
-import { StatPill } from '@renderer/components/layout/AppShell'
+import { ScrollablePageRoot, StatPill } from '@renderer/components/layout/AppShell'
 import { Button } from '@renderer/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@renderer/components/ui/card'
 import { useUiSettings } from '@renderer/stores/ui-settings-store'
@@ -11,6 +11,8 @@ import { useUiSettings } from '@renderer/stores/ui-settings-store'
 export function HomePage(): React.JSX.Element {
   const [activeQuestions, setActiveQuestions] = useState(0)
   const [version, setVersion] = useState('')
+  const [rosterGroupCount, setRosterGroupCount] = useState(0)
+  const [rosterMemberCount, setRosterMemberCount] = useState(0)
   const [games, setGames] = useState<GameSummary[]>([])
   const reducedMotion = useReducedMotion()
   const effectLevel = useUiSettings((state) => state.effectLevel)
@@ -20,6 +22,8 @@ export function HomePage(): React.JSX.Element {
     void window.gameAPI.app.getHomeSummary().then((summary) => {
       setActiveQuestions(summary.activeQuestionCount)
       setVersion(summary.version)
+      setRosterGroupCount(summary.rosterGroupCount)
+      setRosterMemberCount(summary.rosterMemberCount)
     })
     void window.gameAPI.games
       .list()
@@ -32,7 +36,7 @@ export function HomePage(): React.JSX.Element {
   )
 
   return (
-    <div className="app-shell">
+    <ScrollablePageRoot>
       <motion.div
         className="grid flex-1 items-center gap-10 lg:grid-cols-[1.35fr_0.75fr]"
         initial={motionOn ? { opacity: 0, y: 12 } : false}
@@ -55,6 +59,11 @@ export function HomePage(): React.JSX.Element {
             <Button asChild size="lg">
               <Link to="/setup">创建新比赛</Link>
             </Button>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button asChild variant="secondary" size="lg">
+              <Link to="/grouping">比赛分组</Link>
+            </Button>
             <Button asChild variant="secondary" size="lg">
               <Link to="/questions">题库管理</Link>
             </Button>
@@ -73,14 +82,16 @@ export function HomePage(): React.JSX.Element {
           <div>
             <CardTitle>活动控制台</CardTitle>
             <CardDescription className="mt-2">
-              单屏公开出题。创建比赛时冻结队伍、轮次和题目队列。
+              单屏公开出题。创建比赛时冻结分组、轮次和题目队列。
             </CardDescription>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <StatPill label="有效题目" value={activeQuestions} />
             <StatPill label="版本" value={version || '—'} />
           </div>
-          <p className="text-sm text-first-02">本地 SQLite · 完全离线 · 2–12 支队伍</p>
+          <p className="text-sm text-first-02">
+            本地 SQLite · 完全离线 · 当前分组 {rosterGroupCount} 组 · {rosterMemberCount} 人
+          </p>
           {resumable.slice(0, 1).map((game) => (
             <Link
               key={game.id}
@@ -113,6 +124,6 @@ export function HomePage(): React.JSX.Element {
           )}
         </Card>
       </motion.div>
-    </div>
+    </ScrollablePageRoot>
   )
 }
