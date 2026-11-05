@@ -6,6 +6,23 @@ import {
 } from '../shared/schemas/games'
 import { homeSummarySchema, type HomeSummary } from '../shared/schemas/app'
 import {
+  abortGameInputSchema,
+  gameCommandInputSchema,
+  gameCommandResultSchema,
+  gameSummarySchema,
+  gameUiEventSchema,
+  playSnapshotSchema,
+  submitAnswerInputSchema,
+  type AbortGameInput,
+  type GameCommandInput,
+  type GameCommandResult,
+  type GameSummary,
+  type GameUiEvent,
+  type PlaySnapshot,
+  type SubmitAnswerInput
+} from '../shared/schemas/play'
+import { z } from 'zod'
+import {
   exportBankInputSchema,
   questionQuerySchema,
   type ImportResult,
@@ -33,15 +50,52 @@ const gameAPI = {
   games: {
     create: (config: CreateGameInput): Promise<GameSnapshot> =>
       invoke('games:create', createGameInputSchema.parse(config)),
-    get: (gameId: string): Promise<GameSnapshot> => invoke('games:get', gameId)
+    get: (gameId: string): Promise<PlaySnapshot> =>
+      invoke('games:get', gameId).then((raw) => playSnapshotSchema.parse(raw)),
+    list: (): Promise<GameSummary[]> =>
+      invoke('games:list').then((raw) => z.array(gameSummarySchema).parse(raw)),
+    startTurn: (input: GameCommandInput): Promise<GameCommandResult> =>
+      invoke('games:startTurn', gameCommandInputSchema.parse(input)).then((raw) =>
+        gameCommandResultSchema.parse(raw)
+      ),
+    submitAnswer: (input: SubmitAnswerInput): Promise<GameCommandResult> =>
+      invoke('games:submitAnswer', submitAnswerInputSchema.parse(input)).then((raw) =>
+        gameCommandResultSchema.parse(raw)
+      ),
+    pause: (input: GameCommandInput): Promise<GameCommandResult> =>
+      invoke('games:pause', gameCommandInputSchema.parse(input)).then((raw) =>
+        gameCommandResultSchema.parse(raw)
+      ),
+    resume: (input: GameCommandInput): Promise<GameCommandResult> =>
+      invoke('games:resume', gameCommandInputSchema.parse(input)).then((raw) =>
+        gameCommandResultSchema.parse(raw)
+      ),
+    undoLastAnswer: (input: GameCommandInput): Promise<GameCommandResult> =>
+      invoke('games:undo', gameCommandInputSchema.parse(input)).then((raw) =>
+        gameCommandResultSchema.parse(raw)
+      ),
+    advanceToNextTeam: (input: GameCommandInput): Promise<GameCommandResult> =>
+      invoke('games:advance', gameCommandInputSchema.parse(input)).then((raw) =>
+        gameCommandResultSchema.parse(raw)
+      ),
+    abort: (input: AbortGameInput): Promise<GameCommandResult> =>
+      invoke('games:abort', abortGameInputSchema.parse(input)).then((raw) =>
+        gameCommandResultSchema.parse(raw)
+      )
   },
   app: {
     getHomeSummary: (): Promise<HomeSummary> =>
       invoke('app:getHomeSummary').then((raw) => homeSummarySchema.parse(raw))
   },
   events: {
-    subscribe: (_handler: (event: unknown) => void): (() => void) => {
-      return () => undefined
+    subscribe: (handler: (event: GameUiEvent) => void): (() => void) => {
+      const listener = (_event: unknown, payload: unknown): void => {
+        handler(gameUiEventSchema.parse(payload))
+      }
+      ipcRenderer.on('game:ui-event', listener)
+      return () => {
+        ipcRenderer.removeListener('game:ui-event', listener)
+      }
     }
   }
 }

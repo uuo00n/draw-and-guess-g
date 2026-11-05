@@ -264,6 +264,9 @@ export function GameSetupPage(): React.JSX.Element {
             状态 {created.status} · 队列 {created.queueSize} 题 · 计划挑战 {created.plannedTurnCount}{' '}
             场 · 首场 {created.turns[0]?.status}
           </CardDescription>
+          <Button asChild className="mt-4">
+            <Link to={`/session/${created.id}`}>进入准备页</Link>
+          </Button>
           <ol className="mt-4 max-h-48 overflow-auto text-sm text-brand-muted">
             {created.turns.slice(0, 12).map((turn) => {
               const team = created.teams.find((t) => t.id === turn.teamId)

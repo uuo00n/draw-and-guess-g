@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import type { GameSummary } from '@shared/schemas/play'
 import { PageShell, StatPill } from '@renderer/components/layout/AppShell'
 import { Button } from '@renderer/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@renderer/components/ui/card'
@@ -7,12 +8,14 @@ import { Card, CardDescription, CardTitle } from '@renderer/components/ui/card'
 export function HomePage(): React.JSX.Element {
   const [activeQuestions, setActiveQuestions] = useState(0)
   const [version, setVersion] = useState('')
+  const [games, setGames] = useState<GameSummary[]>([])
 
   useEffect(() => {
     void window.gameAPI.app.getHomeSummary().then((summary) => {
       setActiveQuestions(summary.activeQuestionCount)
       setVersion(summary.version)
     })
+    void window.gameAPI.games.list().then(setGames).catch(() => setGames([]))
   }, [])
 
   return (
@@ -37,9 +40,16 @@ export function HomePage(): React.JSX.Element {
         <div className="grid gap-4">
           <StatPill label="有效题目" value={activeQuestions} />
           <StatPill label="版本" value={version || '—'} />
-          <p className="text-sm text-brand-muted">
-            单屏公开出题 · 本地 SQLite · 完全离线。下一批将实现挑战大屏与权威计时。
-          </p>
+          <p className="text-sm text-brand-muted">单屏公开出题 · 本地 SQLite · 完全离线。</p>
+          {games.length > 0 ? (
+            <div className="space-y-2 text-sm">
+              {games.slice(0, 5).map((game) => (
+                <Link key={game.id} to={`/session/${game.id}`} className="block text-brand-accent">
+                  {game.name} · {game.phase}
+                </Link>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
     </PageShell>

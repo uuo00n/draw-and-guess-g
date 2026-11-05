@@ -1,14 +1,22 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { writeFileSync } from 'node:fs'
+import { app, BrowserWindow, powerSaveBlocker, shell } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './database/connection'
+import { checkpointRunning, recoverDatabase } from './domain/game-engine'
+import { timerEngine } from './domain/timer-engine'
+import { runElectronGameFlow } from './e2e-game-flow'
 import {
   initDatabasePath,
   registerAppHandlers,
   registerGameHandlers,
   registerQuestionHandlers
 } from './ipc/register-handlers'
+
+if (process.env.E2E_USER_DATA) {
+  app.setPath('userData', process.env.E2E_USER_DATA)
+}
 
 let db: ReturnType<typeof openDatabase> | null = null
 
@@ -19,8 +27,8 @@ export function getDb() {
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: 1366,
+    height: 768,
     minWidth: 1024,
     minHeight: 640,
     show: false,
@@ -61,11 +69,33 @@ app.whenReady().then(() => {
 
   const dbPath = initDatabasePath()
   db = openDatabase(dbPath)
+  recoverDatabase(db, timerEngine)
   registerQuestionHandlers(db)
   registerGameHandlers(db)
   registerAppHandlers(db)
 
+  if (process.env.E2E_GAME_FLOW === '1') {
+    const result = runElectronGameFlow(db)
+    writeFileSync(
+      process.env.E2E_RESULT_PATH ?? join(app.getPath('temp'), 'e2e-game-flow.json'),
+      JSON.stringify(result, null, 2)
+    )
+    app.exit(result.ok ? 0 : 1)
+    return
+  }
+
   createWindow()
+  let sleepBlocker: number | null = null
+  setInterval(() => {
+    if (!db) return
+    checkpointRunning(db, timerEngine)
+    const timing = timerEngine.activeGameIds().length > 0
+    if (timing && sleepBlocker == null) sleepBlocker = powerSaveBlocker.start('prevent-display-sleep')
+    if (!timing && sleepBlocker != null) {
+      if (powerSaveBlocker.isStarted(sleepBlocker)) powerSaveBlocker.stop(sleepBlocker)
+      sleepBlocker = null
+    }
+  }, 1000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
