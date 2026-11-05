@@ -1,4 +1,5 @@
 import type { PlaySnapshot } from '@shared/schemas/play'
+import { ScoreValue } from '@renderer/components/ScoreValue'
 
 export function TeamScoreStrip({
   snapshot
@@ -30,7 +31,9 @@ export function TeamScoreStrip({
                   {active ? `★ ${team.name}` : team.name}
                 </span>
               </div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">{team.totalScore}</div>
+              <div className="mt-1 text-xl font-semibold">
+                <ScoreValue value={team.totalScore} />
+              </div>
             </div>
           )
         })}

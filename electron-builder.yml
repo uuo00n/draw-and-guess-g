@@ -1,4 +1,4 @@
-appId: com.electron.app
+appId: com.genpact.draw-and-guess
 productName: draw-and-guess
 directories:
   buildResources: build
@@ -11,13 +11,24 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+  - "**/node_modules/better-sqlite3/**/*.node"
+  - "**/*.node"
 win:
   executableName: draw-and-guess
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: ${productName}-${version}-win-x64-Setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+portable:
+  artifactName: ${productName}-${version}-win-x64-Portable.${ext}
 mac:
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
@@ -38,6 +49,3 @@ linux:
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates

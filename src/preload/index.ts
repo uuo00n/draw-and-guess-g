@@ -6,6 +6,18 @@ import {
 } from '../shared/schemas/games'
 import { homeSummarySchema, type HomeSummary } from '../shared/schemas/app'
 import {
+  backupResultSchema,
+  dataInfoSchema,
+  gameHistorySchema,
+  historyListItemSchema,
+  historyQuerySchema,
+  restoreResultSchema,
+  type DataInfo,
+  type GameHistory,
+  type HistoryListItem,
+  type HistoryQuery
+} from '../shared/schemas/history'
+import {
   abortGameInputSchema,
   gameCommandInputSchema,
   gameCommandResultSchema,
@@ -81,11 +93,29 @@ const gameAPI = {
     abort: (input: AbortGameInput): Promise<GameCommandResult> =>
       invoke('games:abort', abortGameInputSchema.parse(input)).then((raw) =>
         gameCommandResultSchema.parse(raw)
-      )
+      ),
+    listHistory: (query: HistoryQuery = {}): Promise<HistoryListItem[]> =>
+      invoke('games:listHistory', historyQuerySchema.parse(query)).then((raw) =>
+        z.array(historyListItemSchema).parse(raw)
+      ),
+    getHistory: (gameId: string): Promise<GameHistory> =>
+      invoke('games:getHistory', gameId).then((raw) => gameHistorySchema.parse(raw)),
+    exportResults: (gameId: string): Promise<{ saved: boolean; path?: string }> =>
+      invoke('games:exportResults', gameId)
   },
   app: {
     getHomeSummary: (): Promise<HomeSummary> =>
-      invoke('app:getHomeSummary').then((raw) => homeSummarySchema.parse(raw))
+      invoke('app:getHomeSummary').then((raw) => homeSummarySchema.parse(raw)),
+    getDataInfo: (): Promise<DataInfo> =>
+      invoke('app:getDataInfo').then((raw) => dataInfoSchema.parse(raw)),
+    setFullscreen: (enabled: boolean): Promise<boolean> =>
+      invoke('app:setFullscreen', z.boolean().parse(enabled)),
+    toggleFullscreen: (): Promise<boolean> => invoke('app:toggleFullscreen'),
+    openDataFolder: (): Promise<boolean> => invoke('app:openDataFolder'),
+    backupDatabase: (): Promise<{ saved: boolean; path?: string }> =>
+      invoke('app:backupDatabase').then((raw) => backupResultSchema.parse(raw)),
+    restoreDatabase: (): Promise<{ restored: boolean; safetyPath?: string }> =>
+      invoke('app:restoreDatabase').then((raw) => restoreResultSchema.parse(raw))
   },
   events: {
     subscribe: (handler: (event: GameUiEvent) => void): (() => void) => {

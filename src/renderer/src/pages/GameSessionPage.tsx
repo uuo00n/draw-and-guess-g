@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { motion, useReducedMotion } from 'motion/react'
 import type { GameCommandResult, PlaySnapshot } from '@shared/schemas/play'
 import { TeamScoreStrip } from '@renderer/components/TeamScoreStrip'
 import { CountdownRing } from '@renderer/components/CountdownRing'
+import { ScoreValue } from '@renderer/components/ScoreValue'
 import { Button } from '@renderer/components/ui/button'
 import { useGameSnapshot } from '@renderer/hooks/useGameSnapshot'
 import { useTurnClock } from '@renderer/hooks/useTurnClock'
+import { ChampionMark, useSessionEffects } from '@renderer/hooks/useSessionEffects'
+import { useUiSettings } from '@renderer/stores/ui-settings-store'
 
 function newCommandId(): string {
   return crypto.randomUUID()
@@ -21,6 +25,12 @@ export function GameSessionPage(): React.JSX.Element {
     status: snapshot?.currentTurn?.status ?? null,
     authoritativeRemainingMs: snapshot?.currentTurn?.remainingMs ?? 0
   })
+  const { championMark } = useSessionEffects(snapshot, displayRemainingMs)
+  const reducedMotion = useReducedMotion()
+  const effectLevel = useUiSettings((state) => state.effectLevel)
+  const muted = useUiSettings((state) => state.muted)
+  const setMuted = useUiSettings((state) => state.setMuted)
+  const motionOn = !reducedMotion && effectLevel !== 'off'
 
   useEffect(() => {
     if (!snapshot) return
@@ -87,10 +97,19 @@ export function GameSessionPage(): React.JSX.Element {
           <p className="text-xs uppercase tracking-[0.18em] text-brand-accent">DRAW &amp; GUESS</p>
           <h1 className="text-xl font-semibold lg:text-2xl">{snapshot.name}</h1>
         </div>
-        <div className="text-right text-sm text-brand-muted">
+        <div className="flex flex-wrap items-center justify-end gap-3 text-right text-sm text-brand-muted">
+          <Button variant="ghost" onClick={() => setMuted(!muted)}>
+            {muted ? '已静音' : '音效开'}
+          </Button>
+          <Button variant="ghost" onClick={() => void window.gameAPI.app.toggleFullscreen()}>
+            投影全屏
+          </Button>
           <div>
             第 {snapshot.currentTurn?.roundNo ?? 1} / {snapshot.roundCount} 轮
           </div>
+          <Link to={`/history/${gameId}`} className="text-brand-accent">
+            记录
+          </Link>
           <Link to="/" className="text-brand-accent">
             返回首页
           </Link>
@@ -104,7 +123,15 @@ export function GameSessionPage(): React.JSX.Element {
       ) : null}
 
       <TeamScoreStrip snapshot={snapshot} />
-      <section className="mt-6 flex flex-1 flex-col">{renderPhase(snapshot)}</section>
+      <motion.section
+        key={`${snapshot.phase}:${snapshot.currentTurn?.id ?? 'none'}:${snapshot.currentQuestion?.queueItemId ?? 'none'}`}
+        className="mt-6 flex flex-1 flex-col"
+        initial={motionOn ? { opacity: 0, y: 8 } : false}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.18 }}
+      >
+        {renderPhase(snapshot)}
+      </motion.section>
     </div>
   )
 
@@ -128,6 +155,7 @@ export function GameSessionPage(): React.JSX.Element {
             : '比赛已中止'
       return (
         <div className="mx-auto w-full max-w-3xl">
+          <ChampionMark active={championMark && current.showChampion} />
           <h2 className="text-center text-4xl font-semibold">{title}</h2>
           {current.showChampion && current.championTeamId ? (
             <p className="mt-4 text-center text-2xl text-brand-accent">
@@ -145,10 +173,21 @@ export function GameSessionPage(): React.JSX.Element {
                 <span>
                   第 {team.rank} 名 · {team.name}
                 </span>
-                <span className="text-2xl font-semibold tabular-nums">{team.totalScore}</span>
+                <span className="text-2xl font-semibold">
+                  <ScoreValue value={team.totalScore} />
+                </span>
               </li>
             ))}
           </ol>
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <Button onClick={() => void window.gameAPI.games.exportResults(gameId)}>导出成绩</Button>
+            <Button asChild variant="secondary">
+              <Link to={`/history/${gameId}`}>查看详情</Link>
+            </Button>
+            <Button asChild variant="ghost">
+              <Link to="/">返回首页</Link>
+            </Button>
+          </div>
         </div>
       )
     }
@@ -222,6 +261,9 @@ export function GameSessionPage(): React.JSX.Element {
               displayRemainingMs={displayRemainingMs}
             />
           </div>
+          {displayRemainingMs <= 0 ? (
+            <p className="mt-4 text-3xl font-semibold tracking-wide text-brand-accent-strong">TIME UP</p>
+          ) : null}
         </div>
         <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
           <Button disabled={!current.canAnswer || pending} onClick={() => void answer('CORRECT')}>
@@ -300,7 +342,9 @@ function Stat({ label, value }: { label: string; value: number }): React.JSX.Ele
   return (
     <div className="rounded-lg border border-brand-muted/20 bg-brand-bg/40 px-3 py-3">
       <div className="text-xs text-brand-muted">{label}</div>
-      <div className="text-2xl font-semibold tabular-nums">{value}</div>
+      <div className="text-2xl font-semibold">
+        <ScoreValue value={value} />
+      </div>
     </div>
   )
 }

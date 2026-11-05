@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs'
-import { dirname } from 'node:path'
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { dirname, join } from 'node:path'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { z } from 'zod'
 import type { AppDatabase } from '../database/connection'
 import { createGameInputSchema } from '../../shared/schemas/games'
 import { exportBankInputSchema, questionQuerySchema } from '../../shared/schemas/questions'
@@ -10,6 +11,11 @@ import {
   submitAnswerInputSchema,
   type GameUiEvent
 } from '../../shared/schemas/play'
+import { databaseFileBytes, backupDatabaseFile, restoreDatabaseFile } from '../services/backup-service'
+import { getHistory, listHistory } from '../services/history-service'
+import { buildResultsWorkbook } from '../services/results-export'
+import { historyQuerySchema } from '../../shared/schemas/history'
+import type { TimerEngine } from '../domain/timer-engine'
 import { createGame } from '../domain/game-create'
 import {
   abortGame,
@@ -150,13 +156,90 @@ export function registerGameHandlers(db: AppDatabase): void {
   ipcMain.handle('games:abort', (_event, raw: unknown) =>
     settle(abortGame(db, abortGameInputSchema.parse(raw), { timer: timerEngine }))
   )
+
+  ipcMain.handle('games:listHistory', (_event, raw: unknown) =>
+    listHistory(db, historyQuerySchema.parse(raw ?? {}))
+  )
+
+  ipcMain.handle('games:getHistory', (_event, gameId: unknown) => {
+    if (typeof gameId !== 'string') throw new Error('gameId must be string')
+    return getHistory(db, gameId)
+  })
+
+  ipcMain.handle('games:exportResults', async (_event, gameId: unknown) => {
+    if (typeof gameId !== 'string') throw new Error('gameId must be string')
+    const history = getHistory(db, gameId)
+    const buffer = await buildResultsWorkbook(db, gameId)
+    const save = await dialog.showSaveDialog({
+      defaultPath: `${history.name}-成绩.xlsx`,
+      filters: [{ name: 'Excel', extensions: ['xlsx'] }]
+    })
+    if (save.canceled || !save.filePath) return { saved: false }
+    const fs = await import('node:fs/promises')
+    await fs.writeFile(save.filePath, buffer)
+    return { saved: true, path: save.filePath }
+  })
 }
 
-export function registerAppHandlers(db: AppDatabase): void {
+function focusedWindow(): BrowserWindow | undefined {
+  return BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+}
+
+export function registerAppHandlers(
+  db: AppDatabase,
+  options: { dbPath: string; timer: TimerEngine }
+): void {
   ipcMain.handle('app:getHomeSummary', () => ({
     activeQuestionCount: countActiveQuestions(db),
     version: app.getVersion()
   }))
+
+  ipcMain.handle('app:getDataInfo', () => ({
+    dbPath: options.dbPath,
+    bytes: databaseFileBytes(options.dbPath),
+    gameCount: Number((db.prepare('SELECT COUNT(*) AS c FROM games').get() as { c: number }).c),
+    version: app.getVersion()
+  }))
+
+  ipcMain.handle('app:setFullscreen', (_event, raw: unknown) => {
+    const enabled = z.boolean().parse(raw)
+    const win = focusedWindow()
+    win?.setFullScreen(enabled)
+    return win?.isFullScreen() ?? false
+  })
+
+  ipcMain.handle('app:toggleFullscreen', () => {
+    const win = focusedWindow()
+    if (!win) return false
+    win.setFullScreen(!win.isFullScreen())
+    return win.isFullScreen()
+  })
+
+  ipcMain.handle('app:openDataFolder', () => {
+    shell.showItemInFolder(options.dbPath)
+    return true
+  })
+
+  ipcMain.handle('app:backupDatabase', async () => {
+    const save = await dialog.showSaveDialog({
+      defaultPath: 'draw-and-guess-backup.db',
+      filters: [{ name: 'SQLite', extensions: ['db'] }]
+    })
+    if (save.canceled || !save.filePath) return { saved: false }
+    await backupDatabaseFile(db, save.filePath)
+    return { saved: true, path: save.filePath }
+  })
+
+  ipcMain.handle('app:restoreDatabase', async () => {
+    const picked = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters: [{ name: 'SQLite', extensions: ['db'] }]
+    })
+    if (picked.canceled || picked.filePaths.length === 0) return { restored: false }
+    const safetyPath = join(dirname(options.dbPath), `pre-restore-${Date.now()}.db`)
+    await restoreDatabaseFile(db, picked.filePaths[0], safetyPath, options.timer)
+    return { restored: true, safetyPath }
+  })
 }
 
 export function initDatabasePath(): string {

@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs'
-import { app, BrowserWindow, powerSaveBlocker, shell } from 'electron'
+import { app, BrowserWindow, dialog, powerSaveBlocker, shell } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -46,6 +46,31 @@ function createWindow(): void {
     mainWindow.show()
   })
 
+  let quitting = false
+  mainWindow.on('close', (event) => {
+    if (quitting || !db) return
+    const active = db
+      .prepare(`SELECT id FROM games WHERE status IN ('GAME_READY', 'GAME_ACTIVE') LIMIT 1`)
+      .get()
+    if (!active) return
+    event.preventDefault()
+    void dialog
+      .showMessageBox(mainWindow, {
+        type: 'question',
+        buttons: ['暂停并退出', '继续比赛'],
+        defaultId: 1,
+        cancelId: 1,
+        message: '比赛尚未结束',
+        detail: '退出前会暂停正在计时的挑战。已经提交的分数会保留。'
+      })
+      .then(({ response }) => {
+        if (response !== 0 || !db) return
+        recoverDatabase(db, timerEngine)
+        quitting = true
+        mainWindow.close()
+      })
+  })
+
   mainWindow.webContents.setWindowOpenHandler((details) => {
     const allowed = details.url.startsWith('https://electron-vite.org')
     if (allowed) {
@@ -72,7 +97,7 @@ app.whenReady().then(() => {
   recoverDatabase(db, timerEngine)
   registerQuestionHandlers(db)
   registerGameHandlers(db)
-  registerAppHandlers(db)
+  registerAppHandlers(db, { dbPath, timer: timerEngine })
 
   if (process.env.E2E_GAME_FLOW === '1') {
     const result = runElectronGameFlow(db)

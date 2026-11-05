@@ -16,6 +16,11 @@ export default defineConfig({
       alias: {
         '@shared': resolve('src/shared')
       }
+    },
+    build: {
+      externalizeDeps: {
+        exclude: ['zod']
+      }
     }
   },
   renderer: {
@@ -24,6 +29,9 @@ export default defineConfig({
         '@renderer': resolve('src/renderer/src'),
         '@shared': resolve('src/shared')
       }
+    },
+    build: {
+      assetsInlineLimit: 0
     },
     plugins: [react(), tailwindcss()]
   }

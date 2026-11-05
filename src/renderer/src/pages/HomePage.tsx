@@ -35,6 +35,12 @@ export function HomePage(): React.JSX.Element {
             <Button asChild variant="secondary" size="lg">
               <Link to="/questions">题库管理</Link>
             </Button>
+            <Button asChild variant="secondary" size="lg">
+              <Link to="/history">历史记录</Link>
+            </Button>
+            <Button asChild variant="ghost" size="lg">
+              <Link to="/settings">设置</Link>
+            </Button>
           </div>
         </Card>
         <div className="grid gap-4">
@@ -43,9 +49,17 @@ export function HomePage(): React.JSX.Element {
           <p className="text-sm text-brand-muted">单屏公开出题 · 本地 SQLite · 完全离线。</p>
           {games.length > 0 ? (
             <div className="space-y-2 text-sm">
+              {games
+                .filter((game) => game.status === 'GAME_READY' || game.status === 'GAME_ACTIVE')
+                .slice(0, 1)
+                .map((game) => (
+                  <Link key={game.id} to={`/session/${game.id}`} className="block text-brand-accent">
+                    继续未完成比赛 · {game.name}
+                  </Link>
+                ))}
               {games.slice(0, 5).map((game) => (
-                <Link key={game.id} to={`/session/${game.id}`} className="block text-brand-accent">
-                  {game.name} · {game.phase}
+                <Link key={game.id} to={`/history/${game.id}`} className="block text-brand-muted">
+                  {game.name} · {game.status}
                 </Link>
               ))}
             </div>

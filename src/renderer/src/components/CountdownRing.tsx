@@ -29,7 +29,7 @@ export function CountdownRing({
       colorsTime={[safeDuration, Math.min(10, safeDuration), 0]}
       size={240}
       strokeWidth={14}
-      trailColor="#1c3b4d"
+      trailColor="#444744"
       onComplete={() => undefined}
     >
       {() => (
