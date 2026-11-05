@@ -22,7 +22,7 @@ import {
   undoLastAnswer
 } from '../src/main/domain/game-engine'
 import { commitImportRows } from '../src/main/services/question-service'
-import { TEAM_PALETTE } from '../src/shared/constants'
+import { makeTestDataDir, testCreateInput } from './test-roster'
 
 const DURATION = 60_000
 
@@ -45,17 +45,15 @@ function seed(
   )
   if (!imported.bankId) throw new Error('seed failed')
   const teamCount = options?.teams ?? 2
-  const created = createGame(db, {
-    bankId: imported.bankId,
-    roundCount: options?.rounds ?? 1,
-    turnDurationSec: options?.seconds ?? 60,
-    scoreMode: 'UNIFORM',
-    teams: Array.from({ length: teamCount }, (_, index) => ({
-      name: `队${index + 1}`,
-      color: TEAM_PALETTE[index],
-      sortOrder: index
-    }))
-  })
+  const dataDir = makeTestDataDir(teamCount)
+  const created = createGame(
+    db,
+    testCreateInput(imported.bankId, {
+      roundCount: options?.rounds ?? 1,
+      turnDurationSec: options?.seconds ?? 60
+    }),
+    { dataDir }
+  )
   return created
 }
 
@@ -116,13 +114,13 @@ describe('game core loop', () => {
     )
 
     expect(first.applied).toBe(true)
-    expect(first.snapshot.teams.find((team) => team.name === '队1')?.totalScore).toBe(1)
+    expect(first.snapshot.teams.find((team) => team.name === '第 1 组')?.totalScore).toBe(1)
     expect(replay.applied).toBe(false)
     expect(replay.rejectReason).toBe('DUPLICATE')
     expect(secondClick.applied).toBe(false)
     expect(secondClick.rejectReason).toBe('STALE')
     const score = getPlaySnapshot(db, game.id, { timer, now: t0 + 1200 }).teams.find(
-      (team) => team.name === '队1'
+      (team) => team.name === '第 1 组'
     )?.totalScore
     expect(score).toBe(1)
     const corrects = db
@@ -196,7 +194,7 @@ describe('game core loop', () => {
     )
     expect(undone.snapshot.currentQuestion?.text).toBe(firstText)
     expect(undone.snapshot.currentTurn?.remainingMs).toBe(beforeUndo)
-    expect(undone.snapshot.teams.find((team) => team.name === '队1')?.totalScore).toBe(0)
+    expect(undone.snapshot.teams.find((team) => team.name === '第 1 组')?.totalScore).toBe(0)
     const states = queueStates(db, game.id)
     expect(states.find((row) => row.id === revealedId)?.state).toBe('VOIDED')
     expect(states.filter((row) => row.state === 'CURRENT')).toHaveLength(1)
@@ -212,7 +210,7 @@ describe('game core loop', () => {
       { timer, now: t0 + 4000 }
     )
     expect(again.snapshot.currentQuestion?.queueItemId).not.toBe(revealedId)
-    expect(again.snapshot.teams.find((team) => team.name === '队1')?.totalScore).toBe(0)
+    expect(again.snapshot.teams.find((team) => team.name === '第 1 组')?.totalScore).toBe(0)
     expect(queueStates(db, game.id).find((row) => row.id === revealedId)?.state).toBe('VOIDED')
   })
 
@@ -273,7 +271,7 @@ describe('game core loop', () => {
     )
     expect(ready.snapshot.phase).toBe('ready')
     expect(ready.snapshot.currentTurn?.status).toBe('TURN_READY')
-    expect(ready.snapshot.currentTurn?.teamName).toBe('队2')
+    expect(ready.snapshot.currentTurn?.teamName).toBe('第 2 组')
     expect(ready.snapshot.currentQuestion).toBeNull()
     expect(timer.peek(game.id, t0 + DURATION + 1)).toBeNull()
 
@@ -317,7 +315,7 @@ describe('game core loop', () => {
       'TURN_EXHAUSTED',
       'TURN_NOT_PLAYED'
     ])
-    expect(exhausted.snapshot.teams.find((team) => team.name === '队1')?.totalScore).toBe(1)
+    expect(exhausted.snapshot.teams.find((team) => team.name === '第 1 组')?.totalScore).toBe(1)
   })
 
   it('prefers timeout over exhaust when the clock and the last question hit together', () => {
@@ -488,7 +486,7 @@ describe('game core loop', () => {
     )
     expect(aborted.snapshot.status).toBe('GAME_ABORTED')
     expect(aborted.snapshot.showChampion).toBe(false)
-    expect(aborted.snapshot.teams.find((team) => team.name === '队1')?.totalScore).toBe(1)
+    expect(aborted.snapshot.teams.find((team) => team.name === '第 1 组')?.totalScore).toBe(1)
     expect(aborted.snapshot.turns.some((turn) => turn.status === 'TURN_ABORTED')).toBe(true)
     expect(aborted.snapshot.turns.some((turn) => turn.status === 'TURN_NOT_PLAYED')).toBe(true)
     const voided = queueStates(db, game.id).filter((row) => row.state === 'VOIDED')

@@ -1,8 +1,9 @@
-import { randomUUID } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { openMemoryDatabase } from '../src/main/database/connection'
 import { createGame, GameCreateError, loadGameSnapshot } from '../src/main/domain/game-create'
 import { commitImportRows } from '../src/main/services/question-service'
+import { makeTestDataDir, testCreateInput } from './test-roster'
+import { randomUUID } from 'node:crypto'
 
 function seedBank(db: ReturnType<typeof openMemoryDatabase>, texts: string[]): string {
   const rows = texts.map((text, index) => ({
@@ -20,43 +21,32 @@ function seedBank(db: ReturnType<typeof openMemoryDatabase>, texts: string[]): s
 describe('createGame', () => {
   it('refuses when no questions available', () => {
     const db = openMemoryDatabase()
+    const dataDir = makeTestDataDir(2)
     const bankId = randomUUID()
     db.prepare(
       `INSERT INTO question_banks (id, name, source_filename, imported_at, file_sha256, active)
        VALUES (?, 'empty', NULL, datetime('now'), 'x', 1)`
     ).run(bankId)
     expect(() =>
-      createGame(db, {
-        bankId,
-        roundCount: 1,
-        turnDurationSec: 60,
-        scoreMode: 'UNIFORM',
-        teams: [
-          { name: 'A', color: '#ff0000', sortOrder: 0 },
-          { name: 'B', color: '#00ff00', sortOrder: 1 }
-        ]
-      })
+      createGame(db, testCreateInput(bankId), { dataDir })
     ).toThrowError(GameCreateError)
   })
 
   it('freezes shuffled queue snapshots and turn schedule', () => {
     const db = openMemoryDatabase()
+    const dataDir = makeTestDataDir(2)
     const bankId = seedBank(db, ['苹果', '香蕉', '橙子', '葡萄', '西瓜'])
-    const snapshot = createGame(db, {
-      bankId,
-      roundCount: 2,
-      turnDurationSec: 60,
-      scoreMode: 'UNIFORM',
-      teams: [
-        { name: '红队', color: '#ff555f', sortOrder: 0 },
-        { name: '蓝队', color: '#4da3ff', sortOrder: 1 }
-      ]
-    })
+    const snapshot = createGame(
+      db,
+      testCreateInput(bankId, { roundCount: 2 }),
+      { dataDir }
+    )
 
     expect(snapshot.plannedTurnCount).toBe(4)
     expect(snapshot.queueSize).toBe(5)
     expect(snapshot.turns[0]?.status).toBe('TURN_READY')
     expect(snapshot.turns[1]?.status).toBe('TURN_PENDING')
+    expect(snapshot.teams[0]?.members).toHaveLength(1)
 
     const queue = db
       .prepare(
@@ -81,17 +71,13 @@ describe('createGame', () => {
 
   it('freezes a 30 second challenge', () => {
     const db = openMemoryDatabase()
+    const dataDir = makeTestDataDir(2)
     const bankId = seedBank(db, ['苹果'])
-    const snapshot = createGame(db, {
-      bankId,
-      roundCount: 1,
-      turnDurationSec: 30,
-      scoreMode: 'UNIFORM',
-      teams: [
-        { name: '红队', color: '#ff555f', sortOrder: 0 },
-        { name: '蓝队', color: '#4da3ff', sortOrder: 1 }
-      ]
-    })
+    const snapshot = createGame(
+      db,
+      testCreateInput(bankId, { turnDurationSec: 30 }),
+      { dataDir }
+    )
     expect(snapshot.turnDurationMs).toBe(30_000)
   })
 })

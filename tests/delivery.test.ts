@@ -22,7 +22,7 @@ import { buildResultsWorkbook } from '../src/main/services/results-export'
 import { commitImportRows } from '../src/main/services/question-service'
 import { planCommittedEffects, nextTickSecond } from '../src/shared/effects'
 import type { GameUiEvent } from '../src/shared/schemas/play'
-import { TEAM_PALETTE } from '../src/shared/constants'
+import { makeTestDataDir, testCreateInput } from './test-roster'
 
 const DURATION = 60_000
 
@@ -40,17 +40,12 @@ function seed(db: AppDatabase, texts: string[], rounds = 1) {
     }))
   )
   if (!imported.bankId) throw new Error('seed failed')
-  return createGame(db, {
-    name: `团建 ${texts[0]}`,
-    bankId: imported.bankId,
-    roundCount: rounds,
-    turnDurationSec: 60,
-    scoreMode: 'UNIFORM',
-    teams: [
-      { name: '红队', color: TEAM_PALETTE[0], sortOrder: 0 },
-      { name: '蓝队', color: TEAM_PALETTE[1], sortOrder: 1 }
-    ]
-  })
+  const dataDir = makeTestDataDir(2)
+  return createGame(
+    db,
+    testCreateInput(imported.bankId, { name: `团建 ${texts[0]}`, roundCount: rounds }),
+    { dataDir }
+  )
 }
 
 function event(partial: Partial<GameUiEvent> & Pick<GameUiEvent, 'kind'>): GameUiEvent {
@@ -142,7 +137,7 @@ describe('history, export, and backup', () => {
     ])
     expect(listHistory(db, { status: 'GAME_ABORTED' })).toHaveLength(1)
     expect(listHistory(db, { status: 'GAME_FINISHED_EARLY' })[0]?.outcomeLabel).toBe('不授冠')
-    expect(listHistory(db, { keyword: '梨' })[0]?.outcomeLabel).toBe('冠军 红队')
+    expect(listHistory(db, { keyword: '梨' })[0]?.outcomeLabel).toBe('冠军 第 1 组')
     expect(listHistory(db, { keyword: '苹果' })[0]?.outcomeLabel).toBe('并列')
 
     const earlyHistory = getHistory(db, early.id)

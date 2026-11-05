@@ -1,20 +1,27 @@
 import { describe, expect, it } from 'vitest'
 import { clampTurnDurationSec } from '../src/shared/constants'
 import { createGameInputSchema } from '../src/shared/schemas/games'
+import { randomUUID } from 'node:crypto'
 
 const bankId = '11111111-1111-4111-8111-111111111111'
-const teams = [
-  { name: 'A', color: '#ff0000', sortOrder: 0 },
-  { name: 'B', color: '#00ff00', sortOrder: 1 }
-]
 
 describe('turn duration bounds', () => {
   it('accepts 30 seconds and rejects 29', () => {
     expect(
-      createGameInputSchema.safeParse({ bankId, turnDurationSec: 30, teams }).success
+      createGameInputSchema.safeParse({
+        commandId: randomUUID(),
+        bankId,
+        categoryFilter: ['测试'],
+        turnDurationSec: 30
+      }).success
     ).toBe(true)
     expect(
-      createGameInputSchema.safeParse({ bankId, turnDurationSec: 29, teams }).success
+      createGameInputSchema.safeParse({
+        commandId: randomUUID(),
+        bankId,
+        categoryFilter: ['测试'],
+        turnDurationSec: 29
+      }).success
     ).toBe(false)
   })
 
