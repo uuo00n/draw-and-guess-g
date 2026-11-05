@@ -8,6 +8,8 @@ import championMark from '@renderer/assets/champion-mark.json'
 import correctUrl from '@renderer/assets/sounds/correct.wav'
 import skipUrl from '@renderer/assets/sounds/skip.wav'
 import startUrl from '@renderer/assets/sounds/start.wav'
+import gameStartUrl from '@renderer/assets/sounds/game-start.wav'
+import gameEndUrl from '@renderer/assets/sounds/game-end.wav'
 import tickUrl from '@renderer/assets/sounds/tick.wav'
 import timeUpUrl from '@renderer/assets/sounds/time-up.wav'
 import championUrl from '@renderer/assets/sounds/champion.wav'
@@ -27,7 +29,8 @@ function burst(kind: 'correct' | 'champion'): void {
     scalar: 0.8,
     ticks: 90,
     disableForReducedMotion: true,
-    origin: { y: 0.35 }
+    origin: { y: 0.35 },
+    colors: ['#FFAD28', '#FF555F', '#FFFFFF', '#FFF2DF']
   })
 }
 
@@ -46,6 +49,8 @@ export function useSessionEffects(
   const [playCorrect] = useSound(correctUrl, soundOptions)
   const [playSkip] = useSound(skipUrl, soundOptions)
   const [playStart] = useSound(startUrl, soundOptions)
+  const [playGameStart] = useSound(gameStartUrl, soundOptions)
+  const [playGameEnd] = useSound(gameEndUrl, soundOptions)
   const [playTick] = useSound(tickUrl, soundOptions)
   const [playTimeUp] = useSound(timeUpUrl, soundOptions)
   const [playChampion] = useSound(championUrl, soundOptions)
@@ -54,6 +59,8 @@ export function useSessionEffects(
     correct: playCorrect,
     skip: playSkip,
     start: playStart,
+    'game-start': playGameStart,
+    'game-end': playGameEnd,
     'time-up': playTimeUp,
     champion: playChampion
   }
@@ -128,7 +135,11 @@ export function useSessionEffects(
   }, [snapshot, effectLevel, muted, championSerial])
 
   useEffect(() => {
-    const second = nextTickSecond(lastTick.current, displayRemainingMs, snapshot?.phase === 'running')
+    const second = nextTickSecond(
+      lastTick.current,
+      displayRemainingMs,
+      snapshot?.phase === 'running'
+    )
     if (second == null) return
     lastTick.current = second
     if (muted) return

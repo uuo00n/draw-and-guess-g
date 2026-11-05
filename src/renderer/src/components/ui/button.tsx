@@ -4,14 +4,15 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { cn } from '@renderer/lib/utils'
 
 const buttonVariants = cva(
-  'inline-flex items-center justify-center gap-2 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-accent disabled:pointer-events-none disabled:opacity-50',
+  'inline-flex cursor-pointer items-center justify-center gap-2 rounded-[10px] text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-coral focus-visible:ring-offset-2 focus-visible:ring-offset-midnight disabled:pointer-events-none disabled:opacity-40',
   {
     variants: {
       variant: {
-        default: 'bg-brand-accent text-brand-bg hover:bg-brand-accent/90',
-        secondary: 'bg-brand-surface text-brand-text hover:bg-brand-surface/80 border border-brand-muted/30',
-        ghost: 'hover:bg-brand-surface/60',
-        destructive: 'bg-brand-accent-strong text-white hover:bg-brand-accent-strong/90'
+        default: 'bg-coral text-midnight hover:bg-coral-hover active:brightness-95',
+        secondary:
+          'border border-first-01 bg-elevated text-morning hover:border-first-02 hover:bg-surface active:bg-midnight',
+        ghost: 'text-first-03 hover:bg-elevated hover:text-morning active:bg-surface',
+        destructive: 'bg-danger text-morning hover:bg-danger-hover active:brightness-95'
       },
       size: {
         default: 'h-10 px-4 py-2',
@@ -27,15 +28,16 @@ const buttonVariants = cva(
 )
 
 export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
   asChild?: boolean
 }
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
     const Comp = asChild ? Slot : 'button'
-    return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+    return (
+      <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />
+    )
   }
 )
 Button.displayName = 'Button'

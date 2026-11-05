@@ -149,9 +149,17 @@ function uiEvent(
   gameId: string,
   eventId: string,
   kind: GameUiEvent['kind'],
-  verdict?: GameUiEvent['verdict']
+  verdict?: GameUiEvent['verdict'],
+  turnSequenceNo?: number
 ): GameUiEvent {
-  return { eventId, gameId, kind, verdict, emittedAt: isoNow() }
+  return {
+    eventId,
+    gameId,
+    kind,
+    verdict,
+    ...(turnSequenceNo != null ? { turnSequenceNo } : {}),
+    emittedAt: isoNow()
+  }
 }
 
 function requireMutableGame(game: GameRow): void {
@@ -425,7 +433,7 @@ export function startTurn(
       true,
       eventId,
       undefined,
-      uiEvent(input.gameId, eventId, 'TURN_STARTED')
+      uiEvent(input.gameId, eventId, 'TURN_STARTED', undefined, turn.sequence_no)
     )
   })
 }

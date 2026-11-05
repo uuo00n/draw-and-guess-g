@@ -56,10 +56,11 @@ function seed(db: AppDatabase, texts: string[], rounds = 1) {
 function event(partial: Partial<GameUiEvent> & Pick<GameUiEvent, 'kind'>): GameUiEvent {
   return {
     eventId: partial.eventId ?? 'evt-1',
-    gameId: '00000000-0000-4000-8000-000000000001',
+    gameId: partial.gameId ?? '00000000-0000-4000-8000-000000000001',
     kind: partial.kind,
     verdict: partial.verdict,
-    emittedAt: '2026-11-05T00:00:00.000Z'
+    turnSequenceNo: partial.turnSequenceNo,
+    emittedAt: partial.emittedAt ?? '2026-11-05T00:00:00.000Z'
   }
 }
 
@@ -254,12 +255,23 @@ describe('effect policy', () => {
     expect(timeout.sounds).toEqual(['time-up'])
   })
 
+  it('uses game-start only for the first team challenge', () => {
+    const opening = planCommittedEffects(
+      event({ kind: 'TURN_STARTED', turnSequenceNo: 1 }),
+      base
+    )
+    expect(opening.sounds).toEqual(['game-start'])
+
+    const nextTeam = planCommittedEffects(event({ kind: 'TURN_STARTED', turnSequenceNo: 2 }), base)
+    expect(nextTeam.sounds).toEqual(['start'])
+  })
+
   it('withholds the champion cue unless the match finished with a unique winner', () => {
     const early = planCommittedEffects(
       event({ kind: 'GAME_FINISHED_EARLY', verdict: 'CORRECT' }),
       { ...base, showChampion: false }
     )
-    expect(early.sounds).toEqual(['correct'])
+    expect(early.sounds).toEqual(['correct', 'game-end'])
     expect(early.confetti).toBe('correct')
     expect(early.championMark).toBe(false)
 
@@ -271,11 +283,12 @@ describe('effect policy', () => {
     const tie = planCommittedEffects(event({ kind: 'GAME_FINISHED' }), { ...base, showChampion: false })
     expect(tie.championMark).toBe(false)
     expect(tie.confetti).toBe('none')
+    expect(tie.sounds).toEqual(['game-end'])
 
     const champion = planCommittedEffects(event({ kind: 'GAME_FINISHED' }), base)
     expect(champion.championMark).toBe(true)
     expect(champion.confetti).toBe('champion')
-    expect(champion.sounds).toEqual(['champion'])
+    expect(champion.sounds).toEqual(['champion', 'game-end'])
 
     const quiet = planCommittedEffects(event({ kind: 'GAME_FINISHED' }), {
       ...base,

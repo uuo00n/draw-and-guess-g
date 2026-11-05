@@ -4,6 +4,8 @@ import type { HistoryListItem, HistoryQuery } from '@shared/schemas/history'
 import { PageShell } from '@renderer/components/layout/AppShell'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import { StatusNote } from '@renderer/components/ui/status-note'
+import { cn } from '@renderer/lib/utils'
 
 const FILTERS = [
   { id: '', label: '全部' },
@@ -13,6 +15,13 @@ const FILTERS = [
   { id: 'GAME_FINISHED_EARLY', label: '提前结束' },
   { id: 'GAME_ABORTED', label: '已中止' }
 ] as const
+
+function statusClass(status: string): string {
+  if (status === 'GAME_FINISHED') return 'text-gold'
+  if (status === 'GAME_ACTIVE') return 'text-coral'
+  if (status === 'GAME_ABORTED') return 'text-danger'
+  return 'text-first-03'
+}
 
 export function HistoryPage(): React.JSX.Element {
   const [keyword, setKeyword] = useState('')
@@ -24,7 +33,9 @@ export function HistoryPage(): React.JSX.Element {
     void window.gameAPI.games
       .listHistory({ keyword: keyword.trim() || undefined, status })
       .then(setRows)
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : '无法读取历史'))
+      .catch((reason: unknown) =>
+        setError(reason instanceof Error ? reason.message : '无法读取历史')
+      )
   }, [keyword, status])
 
   return (
@@ -39,7 +50,9 @@ export function HistoryPage(): React.JSX.Element {
         {FILTERS.map((filter) => (
           <Button
             key={filter.id || 'all'}
-            variant={status === filter.id || (!status && filter.id === '') ? 'default' : 'secondary'}
+            variant={
+              status === filter.id || (!status && filter.id === '') ? 'default' : 'secondary'
+            }
             onClick={() => setStatus(filter.id === '' ? undefined : filter.id)}
           >
             {filter.label}
@@ -49,45 +62,52 @@ export function HistoryPage(): React.JSX.Element {
           <Link to="/">返回首页</Link>
         </Button>
       </div>
-      {error ? <p className="mb-4 text-brand-accent-strong">{error}</p> : null}
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[880px] border-collapse text-left text-sm">
-          <thead className="text-brand-muted">
+      {error ? (
+        <StatusNote tone="danger" className="mb-4">
+          {error}
+        </StatusNote>
+      ) : null}
+      <div className="gp-table-wrap">
+        <table className="gp-table min-w-[880px]">
+          <thead>
             <tr>
-              <th className="border-b border-brand-muted/20 px-3 py-2">赛事</th>
-              <th className="border-b border-brand-muted/20 px-3 py-2">日期</th>
-              <th className="border-b border-brand-muted/20 px-3 py-2">状态</th>
-              <th className="border-b border-brand-muted/20 px-3 py-2">队伍</th>
-              <th className="border-b border-brand-muted/20 px-3 py-2">轮数</th>
-              <th className="border-b border-brand-muted/20 px-3 py-2">已用题</th>
-              <th className="border-b border-brand-muted/20 px-3 py-2">结果</th>
-              <th className="border-b border-brand-muted/20 px-3 py-2">总分</th>
+              <th>赛事</th>
+              <th>日期</th>
+              <th>状态</th>
+              <th>队伍</th>
+              <th>轮数</th>
+              <th>已用题</th>
+              <th>结果</th>
+              <th>总分</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.id}>
-                <td className="border-b border-brand-muted/10 px-3 py-3">
-                  <Link to={`/history/${row.id}`} className="text-brand-accent">
+                <td>
+                  <Link
+                    to={`/history/${row.id}`}
+                    className="font-semibold text-coral hover:text-coral-hover"
+                  >
                     {row.name}
                   </Link>
                 </td>
-                <td className="border-b border-brand-muted/10 px-3 py-3">{row.createdAt.slice(0, 16)}</td>
-                <td className="border-b border-brand-muted/10 px-3 py-3">
+                <td className="tabular-nums">{row.createdAt.slice(0, 16)}</td>
+                <td className={cn(statusClass(row.status))}>
                   {row.statusLabel}
                   {row.activityLabel ? ` · ${row.activityLabel}` : ''}
                 </td>
-                <td className="border-b border-brand-muted/10 px-3 py-3">{row.teamCount}</td>
-                <td className="border-b border-brand-muted/10 px-3 py-3">{row.roundCount}</td>
-                <td className="border-b border-brand-muted/10 px-3 py-3">{row.usedQuestionCount}</td>
-                <td className="border-b border-brand-muted/10 px-3 py-3">{row.outcomeLabel}</td>
-                <td className="border-b border-brand-muted/10 px-3 py-3">{row.scoreTotal}</td>
+                <td className="tabular-nums">{row.teamCount}</td>
+                <td className="tabular-nums">{row.roundCount}</td>
+                <td className="tabular-nums">{row.usedQuestionCount}</td>
+                <td>{row.outcomeLabel}</td>
+                <td className="tabular-nums text-gold">{row.scoreTotal}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        {rows.length === 0 ? <p className="mt-6 text-brand-muted">没有符合条件的比赛。</p> : null}
       </div>
+      {rows.length === 0 ? <p className="mt-6 text-first-03">没有符合条件的比赛。</p> : null}
     </PageShell>
   )
 }

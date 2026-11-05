@@ -6,8 +6,8 @@ import {
   ROUND_COUNT_MIN,
   TEAM_COUNT_MAX,
   TEAM_COUNT_MIN,
-  TURN_DURATION_MS_MAX,
-  TURN_DURATION_MS_MIN
+  TURN_DURATION_SEC_MAX,
+  TURN_DURATION_SEC_MIN
 } from '../constants'
 import { uuidSchema } from './common'
 
@@ -28,8 +28,8 @@ export const createGameInputSchema = z
     turnDurationSec: z
       .number()
       .int()
-      .min(TURN_DURATION_MS_MIN / 1000)
-      .max(TURN_DURATION_MS_MAX / 1000)
+      .min(TURN_DURATION_SEC_MIN)
+      .max(TURN_DURATION_SEC_MAX)
       .default(DEFAULT_TURN_DURATION_SEC),
     scoreMode: scoreModeSchema.default('UNIFORM'),
     teams: z.array(teamConfigSchema).min(TEAM_COUNT_MIN).max(TEAM_COUNT_MAX)

@@ -5,6 +5,8 @@ import { PageShell, StatPill } from '@renderer/components/layout/AppShell'
 import { Button } from '@renderer/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@renderer/components/ui/card'
 import { Input } from '@renderer/components/ui/input'
+import { Select } from '@renderer/components/ui/select'
+import { StatusNote } from '@renderer/components/ui/status-note'
 
 export function QuestionBankPage(): React.JSX.Element {
   const [banks, setBanks] = useState<QuestionBankSummary[]>([])
@@ -100,27 +102,33 @@ export function QuestionBankPage(): React.JSX.Element {
       </div>
 
       {error ? (
-        <div className="mb-4 rounded-md border border-brand-accent-strong/50 bg-brand-accent-strong/10 px-4 py-3 text-sm">
+        <StatusNote tone="danger" className="mb-4">
           {error}
-        </div>
+        </StatusNote>
       ) : null}
 
       {importResult ? (
-        <Card className="mb-6 border-brand-accent/40">
+        <Card className="mb-6 border-gold/40">
           <CardTitle>导入结果 · {importResult.fileName}</CardTitle>
           <CardDescription className="mt-2">
             共 {importResult.totalRows} 行 · 成功 {importResult.importedCount} · 重复跳过{' '}
             {importResult.skippedDuplicateCount} · 无效 {importResult.skippedInvalidCount}
           </CardDescription>
           {importResult.errors.length > 0 ? (
-            <ul className="mt-4 max-h-40 overflow-auto text-sm text-brand-muted">
-              {importResult.errors.slice(0, 20).map((err) => (
-                <li key={`${err.rowNumber}-${err.message}`}>
-                  第 {err.rowNumber} 行：{err.message}
-                </li>
-              ))}
-            </ul>
-          ) : null}
+            <StatusNote tone="danger" className="mt-4">
+              <ul className="max-h-40 space-y-1 overflow-auto">
+                {importResult.errors.slice(0, 20).map((err) => (
+                  <li key={`${err.rowNumber}-${err.message}`}>
+                    第 {err.rowNumber} 行：{err.message}
+                  </li>
+                ))}
+              </ul>
+            </StatusNote>
+          ) : (
+            <StatusNote tone="success" className="mt-4">
+              题目已写入本地题库。
+            </StatusNote>
+          )}
         </Card>
       ) : null}
 
@@ -129,9 +137,9 @@ export function QuestionBankPage(): React.JSX.Element {
         <StatPill label="题目总数" value={stats.total} />
         <StatPill label="有效题目" value={stats.active} />
         <div>
-          <label className="text-xs text-brand-muted">选择题库</label>
-          <select
-            className="mt-1 w-full rounded-md border border-brand-muted/30 bg-brand-surface px-3 py-2 text-sm"
+          <label className="text-xs tracking-[0.08em] text-first-03 uppercase">选择题库</label>
+          <Select
+            className="mt-1"
             value={selectedBankId ?? ''}
             onChange={(e) => setSelectedBankId(e.target.value || undefined)}
           >
@@ -140,7 +148,7 @@ export function QuestionBankPage(): React.JSX.Element {
                 {bank.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
       </div>
 
@@ -151,8 +159,8 @@ export function QuestionBankPage(): React.JSX.Element {
           onChange={(e) => setSearch(e.target.value)}
           className="max-w-xs"
         />
-        <select
-          className="rounded-md border border-brand-muted/30 bg-brand-surface px-3 py-2 text-sm"
+        <Select
+          className="w-auto min-w-40"
           value={category}
           onChange={(e) => setCategory(e.target.value)}
         >
@@ -162,34 +170,34 @@ export function QuestionBankPage(): React.JSX.Element {
               {cat}
             </option>
           ))}
-        </select>
+        </Select>
         <Button variant="secondary" onClick={() => void refreshQuestions()} disabled={loading}>
-          刷新
+          {loading ? '刷新中' : '刷新'}
         </Button>
       </div>
 
-      <div className="overflow-auto rounded-xl border border-brand-muted/20">
-        <table className="min-w-full text-left text-sm">
-          <thead className="bg-brand-bg/60 text-brand-muted">
+      <div className="gp-table-wrap">
+        <table className="gp-table min-w-full">
+          <thead>
             <tr>
-              <th className="px-4 py-3">题目</th>
-              <th className="px-4 py-3">分类</th>
-              <th className="px-4 py-3">难度</th>
-              <th className="px-4 py-3">分值</th>
+              <th>题目</th>
+              <th>分类</th>
+              <th>难度</th>
+              <th>分值</th>
             </tr>
           </thead>
           <tbody>
             {pageData?.items.map((item) => (
-              <tr key={item.id} className="border-t border-brand-muted/10">
-                <td className="px-4 py-2">{item.text}</td>
-                <td className="px-4 py-2">{item.category}</td>
-                <td className="px-4 py-2">{item.difficulty}</td>
-                <td className="px-4 py-2">{item.points}</td>
+              <tr key={item.id}>
+                <td>{item.text}</td>
+                <td>{item.category}</td>
+                <td>{item.difficulty}</td>
+                <td className="tabular-nums text-gold">{item.points}</td>
               </tr>
             ))}
             {!pageData?.items.length ? (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-brand-muted">
+                <td colSpan={4} className="px-4 py-8 text-center text-first-03">
                   {selectedBankId ? '暂无题目，请先导入题库' : '请先导入题库'}
                 </td>
               </tr>

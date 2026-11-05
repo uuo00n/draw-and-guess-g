@@ -2,14 +2,17 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { motion, useReducedMotion } from 'motion/react'
 import type { GameCommandResult, PlaySnapshot } from '@shared/schemas/play'
+import { GenpactBrand } from '@renderer/components/branding/GenpactBrand'
 import { TeamScoreStrip } from '@renderer/components/TeamScoreStrip'
 import { CountdownRing } from '@renderer/components/CountdownRing'
 import { ScoreValue } from '@renderer/components/ScoreValue'
 import { Button } from '@renderer/components/ui/button'
+import { StatusNote } from '@renderer/components/ui/status-note'
 import { useGameSnapshot } from '@renderer/hooks/useGameSnapshot'
 import { useTurnClock } from '@renderer/hooks/useTurnClock'
 import { ChampionMark, useSessionEffects } from '@renderer/hooks/useSessionEffects'
 import { useUiSettings } from '@renderer/stores/ui-settings-store'
+import { cn } from '@renderer/lib/utils'
 
 function newCommandId(): string {
   return crypto.randomUUID()
@@ -32,6 +35,34 @@ export function GameSessionPage(): React.JSX.Element {
   const setMuted = useUiSettings((state) => state.setMuted)
   const motionOn = !reducedMotion && effectLevel !== 'off'
 
+  const run = async (action: () => Promise<GameCommandResult>): Promise<void> => {
+    if (pending) return
+    setPending(true)
+    setError(null)
+    try {
+      const result = await action()
+      setSnapshot(result.snapshot)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '操作失败')
+    } finally {
+      setPending(false)
+    }
+  }
+
+  const answer = (verdict: 'CORRECT' | 'SKIPPED'): Promise<void> => {
+    if (!snapshot?.currentTurn || !snapshot.currentQuestion || !snapshot.canAnswer)
+      return Promise.resolve()
+    return run(() =>
+      window.gameAPI.games.submitAnswer({
+        commandId: newCommandId(),
+        gameId,
+        turnId: snapshot.currentTurn!.id,
+        currentQueueItemId: snapshot.currentQuestion!.queueItemId,
+        verdict
+      })
+    )
+  }
+
   useEffect(() => {
     if (!snapshot) return
     const onKey = (event: KeyboardEvent): void => {
@@ -39,8 +70,10 @@ export function GameSessionPage(): React.JSX.Element {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return
       if (event.code === 'Space') {
         event.preventDefault()
-        if (snapshot.canPause) void run(() => window.gameAPI.games.pause({ gameId, commandId: newCommandId() }))
-        if (snapshot.canResume) void run(() => window.gameAPI.games.resume({ gameId, commandId: newCommandId() }))
+        if (snapshot.canPause)
+          void run(() => window.gameAPI.games.pause({ gameId, commandId: newCommandId() }))
+        if (snapshot.canResume)
+          void run(() => window.gameAPI.games.resume({ gameId, commandId: newCommandId() }))
       }
       if (event.key === 'Enter' && snapshot.canAnswer) {
         event.preventDefault()
@@ -57,75 +90,56 @@ export function GameSessionPage(): React.JSX.Element {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [snapshot, gameId])
-
-  const run = async (action: () => Promise<GameCommandResult>): Promise<void> => {
-    if (pending) return
-    setPending(true)
-    setError(null)
-    try {
-      const result = await action()
-      setSnapshot(result.snapshot)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '操作失败')
-    } finally {
-      setPending(false)
-    }
-  }
-
-  const answer = (verdict: 'CORRECT' | 'SKIPPED'): Promise<void> => {
-    if (!snapshot?.currentTurn || !snapshot.currentQuestion || !snapshot.canAnswer) return Promise.resolve()
-    return run(() =>
-      window.gameAPI.games.submitAnswer({
-        commandId: newCommandId(),
-        gameId,
-        turnId: snapshot.currentTurn!.id,
-        currentQueueItemId: snapshot.currentQuestion!.queueItemId,
-        verdict
-      })
-    )
-  }
+  }, [snapshot, gameId, pending])
 
   if (!snapshot) {
-    return <div className="app-shell text-brand-muted">{error ?? '正在读取比赛…'}</div>
+    return <div className="app-shell session-shell text-first-03">{error ?? '正在读取比赛…'}</div>
   }
 
+  const roundLabel = snapshot.currentTurn
+    ? `第 ${snapshot.currentTurn.roundNo} / ${snapshot.roundCount} 轮`
+    : `共 ${snapshot.roundCount} 轮`
+
   return (
-    <div className="app-shell">
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.18em] text-brand-accent">DRAW &amp; GUESS</p>
-          <h1 className="text-xl font-semibold lg:text-2xl">{snapshot.name}</h1>
+    <div className="app-shell session-shell">
+      <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <GenpactBrand variant="wordmark" height={44} />
+          <span className="hidden h-7 w-px bg-first-01 sm:block" />
+          <p className="min-w-0 text-sm text-first-03 sm:text-base">
+            <span className="text-morning">Genpact Dalian Digital</span>
+            <span className="mx-2 text-first-01">|</span>
+            <span className="tracking-[0.12em] text-morning">DRAW &amp; GUESS</span>
+            <span className="mx-2 text-first-01">|</span>
+            <span className="text-gold">{roundLabel}</span>
+          </p>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-3 text-right text-sm text-brand-muted">
+        <div className="flex flex-wrap items-center justify-end gap-2 text-sm">
           <Button variant="ghost" onClick={() => setMuted(!muted)}>
             {muted ? '已静音' : '音效开'}
           </Button>
           <Button variant="ghost" onClick={() => void window.gameAPI.app.toggleFullscreen()}>
             投影全屏
           </Button>
-          <div>
-            第 {snapshot.currentTurn?.roundNo ?? 1} / {snapshot.roundCount} 轮
-          </div>
-          <Link to={`/history/${gameId}`} className="text-brand-accent">
+          <Link to={`/history/${gameId}`} className="px-2 text-coral hover:text-coral-hover">
             记录
           </Link>
-          <Link to="/" className="text-brand-accent">
+          <Link to="/" className="px-2 text-first-03 hover:text-morning">
             返回首页
           </Link>
         </div>
       </header>
 
       {error ? (
-        <div className="mb-4 rounded-md border border-brand-accent-strong/40 bg-brand-accent-strong/10 px-4 py-3 text-sm">
+        <StatusNote tone="danger" className="mb-3">
           {error}
-        </div>
+        </StatusNote>
       ) : null}
 
       <TeamScoreStrip snapshot={snapshot} />
       <motion.section
         key={`${snapshot.phase}:${snapshot.currentTurn?.id ?? 'none'}:${snapshot.currentQuestion?.queueItemId ?? 'none'}`}
-        className="mt-6 flex flex-1 flex-col"
+        className="mt-4 flex min-h-0 flex-1 flex-col"
         initial={motionOn ? { opacity: 0, y: 8 } : false}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.18 }}
@@ -138,49 +152,73 @@ export function GameSessionPage(): React.JSX.Element {
   function renderPhase(current: PlaySnapshot): React.JSX.Element {
     if (current.phase === 'recovery') {
       return (
-        <div className="mx-auto max-w-3xl text-center">
-          <h2 className="text-3xl font-semibold">需要人工恢复</h2>
-          <p className="mt-4 text-brand-muted">
+        <div className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center text-center">
+          <p className="text-xs font-semibold tracking-[0.22em] text-gold">RECOVERY REQUIRED</p>
+          <h2 className="mt-3 text-3xl font-semibold">需要人工恢复</h2>
+          <p className="mt-4 text-first-03">
             检测到 {current.recoveryReason}。已停止开始、判题和自动改分，分数保持原样。
           </p>
         </div>
       )
     }
-    if (current.phase === 'final' || current.phase === 'final-early' || current.phase === 'aborted') {
+    if (
+      current.phase === 'final' ||
+      current.phase === 'final-early' ||
+      current.phase === 'aborted'
+    ) {
       const title =
         current.phase === 'final'
           ? '最终排行榜'
           : current.phase === 'final-early'
             ? '当前积分榜（比赛提前结束）'
             : '比赛已中止'
+      const celebrate = current.showChampion && Boolean(current.championTeamId)
       return (
-        <div className="mx-auto w-full max-w-3xl">
+        <div className={cn('mx-auto w-full max-w-3xl', celebrate && 'gp-award')}>
           <ChampionMark active={championMark && current.showChampion} />
-          <h2 className="text-center text-4xl font-semibold">{title}</h2>
-          {current.showChampion && current.championTeamId ? (
-            <p className="mt-4 text-center text-2xl text-brand-accent">
-              冠军 {current.leaderboard.find((team) => team.teamId === current.championTeamId)?.name}
+          <p className="text-center text-xs font-semibold tracking-[0.22em] text-first-02">
+            {celebrate ? 'TEAM CHALLENGE' : 'GENPACT DALIAN DIGITAL'}
+          </p>
+          <h2 className="mt-2 text-center text-4xl font-semibold">{title}</h2>
+          {celebrate ? (
+            <p className="mt-4 text-center text-3xl font-semibold text-gold">
+              冠军{' '}
+              {current.leaderboard.find((team) => team.teamId === current.championTeamId)?.name}
             </p>
           ) : (
-            <p className="mt-4 text-center text-brand-muted">本场不授予冠军</p>
+            <p className="mt-4 text-center text-first-03">本场不授予冠军</p>
           )}
           <ol className="mt-8 space-y-3">
-            {current.leaderboard.map((team) => (
-              <li
-                key={team.teamId}
-                className="flex items-center justify-between rounded-xl border border-brand-muted/20 bg-brand-surface/70 px-4 py-3"
-              >
-                <span>
-                  第 {team.rank} 名 · {team.name}
-                </span>
-                <span className="text-2xl font-semibold">
-                  <ScoreValue value={team.totalScore} />
-                </span>
-              </li>
-            ))}
+            {current.leaderboard.map((team) => {
+              const isChampion = celebrate && team.teamId === current.championTeamId
+              return (
+                <li
+                  key={team.teamId}
+                  className={cn(
+                    'flex items-center justify-between rounded-[16px] border px-4 py-3',
+                    isChampion ? 'border-gold bg-elevated' : 'border-line bg-surface'
+                  )}
+                  style={{ boxShadow: `inset 3px 0 0 ${team.color}` }}
+                >
+                  <span>
+                    第 {team.rank} 名 · {team.name}
+                  </span>
+                  <span
+                    className={cn(
+                      'text-2xl font-semibold tabular-nums',
+                      isChampion ? 'text-gold' : 'text-morning'
+                    )}
+                  >
+                    <ScoreValue value={team.totalScore} />
+                  </span>
+                </li>
+              )
+            })}
           </ol>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Button onClick={() => void window.gameAPI.games.exportResults(gameId)}>导出成绩</Button>
+          <div className="mt-8 flex flex-wrap justify-center gap-3 pb-2">
+            <Button onClick={() => void window.gameAPI.games.exportResults(gameId)}>
+              导出成绩
+            </Button>
             <Button asChild variant="secondary">
               <Link to={`/history/${gameId}`}>查看详情</Link>
             </Button>
@@ -195,14 +233,20 @@ export function GameSessionPage(): React.JSX.Element {
       const seconds = Math.round(current.turnDurationMs / 1000)
       return (
         <div className="mx-auto flex max-w-4xl flex-1 flex-col items-center justify-center text-center">
-          <p className="text-brand-muted">ROUND {current.currentTurn?.roundNo} / {current.roundCount}</p>
-          <h2 className="mt-4 text-5xl font-semibold lg:text-6xl">下一位：{current.currentTurn?.teamName}</h2>
-          <p className="mt-4 text-brand-muted">准备页不展示题目。主持人确认后才开始计时。</p>
+          <p className="text-xs font-semibold tracking-[0.22em] text-gold">
+            ROUND {current.currentTurn?.roundNo} / {current.roundCount}
+          </p>
+          <h2 className="mt-4 text-5xl font-semibold lg:text-6xl">
+            下一位：{current.currentTurn?.teamName}
+          </h2>
+          <p className="mt-4 text-first-03">准备页不展示题目。主持人确认后才开始计时。</p>
           <Button
             size="lg"
             className="mt-8"
             disabled={!current.canStart || pending}
-            onClick={() => void run(() => window.gameAPI.games.startTurn({ gameId, commandId: newCommandId() }))}
+            onClick={() =>
+              void run(() => window.gameAPI.games.startTurn({ gameId, commandId: newCommandId() }))
+            }
           >
             开始 {seconds} 秒挑战
           </Button>
@@ -213,10 +257,10 @@ export function GameSessionPage(): React.JSX.Element {
     if (current.phase === 'turn-result') {
       const turn = current.currentTurn
       return (
-        <div className="mx-auto max-w-3xl text-center">
+        <div className="mx-auto flex max-w-3xl flex-1 flex-col items-center justify-center text-center">
           <h2 className="text-4xl font-semibold">{turn?.teamName} 本队结束</h2>
-          <p className="mt-4 text-brand-muted">倒计时已停止。下一队需要主持人手动开始。</p>
-          <div className="mt-6 grid grid-cols-2 gap-3 text-left md:grid-cols-4">
+          <p className="mt-4 text-first-03">倒计时已停止。下一队需要主持人手动开始。</p>
+          <div className="mt-6 grid w-full grid-cols-2 gap-3 text-left md:grid-cols-4">
             <Stat label="得分" value={turn?.turnScore ?? 0} />
             <Stat label="答对" value={turn?.correctCount ?? 0} />
             <Stat label="跳过" value={turn?.skipCount ?? 0} />
@@ -228,7 +272,9 @@ export function GameSessionPage(): React.JSX.Element {
               className="mt-8"
               disabled={pending}
               onClick={() =>
-                void run(() => window.gameAPI.games.advanceToNextTeam({ gameId, commandId: newCommandId() }))
+                void run(() =>
+                  window.gameAPI.games.advanceToNextTeam({ gameId, commandId: newCommandId() })
+                )
               }
             >
               下一队准备
@@ -241,17 +287,25 @@ export function GameSessionPage(): React.JSX.Element {
 
     const durationSeconds = Math.round(current.turnDurationMs / 1000)
     const syncRemainingSeconds = Math.ceil((current.currentTurn?.remainingMs ?? 0) / 1000)
+    const teamColor = current.teams.find((team) => team.id === current.currentTurn?.teamId)?.color
     return (
-      <div className="flex flex-1 flex-col">
-        <div className="mt-6 flex flex-1 flex-col items-center justify-center">
-          <p className="text-lg text-brand-muted">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-2">
+          <p className="flex items-center gap-2 text-lg text-first-03">
+            {teamColor ? (
+              <span className="h-3 w-3 rounded-full" style={{ backgroundColor: teamColor }} />
+            ) : null}
             当前挑战：{current.currentTurn?.teamName}
-            {current.phase === 'paused' ? ' · 已暂停' : ''}
+            {current.phase === 'paused' ? (
+              <span className="rounded-full border border-gold/50 px-2 py-0.5 text-xs font-semibold tracking-[0.14em] text-gold">
+                已暂停
+              </span>
+            ) : null}
           </p>
-          <h2 className="mt-6 max-w-5xl text-center text-4xl font-semibold leading-tight break-words text-brand-text md:text-6xl xl:text-7xl">
+          <h2 className="question-display text-morning">
             {current.currentQuestion?.text ?? '等待题目'}
           </h2>
-          <div className="mt-8">
+          <div className="mt-6 shrink-0">
             <CountdownRing
               turnId={current.currentTurn?.id ?? 'none'}
               syncKey={current.syncKey}
@@ -262,37 +316,57 @@ export function GameSessionPage(): React.JSX.Element {
             />
           </div>
           {displayRemainingMs <= 0 ? (
-            <p className="mt-4 text-3xl font-semibold tracking-wide text-brand-accent-strong">TIME UP</p>
+            <p className="mt-4 text-3xl font-semibold tracking-[0.18em] text-coral">TIME UP</p>
           ) : null}
         </div>
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-          <Button disabled={!current.canAnswer || pending} onClick={() => void answer('CORRECT')}>
+        <div className="mt-4 flex shrink-0 flex-wrap items-center justify-center gap-3">
+          <Button
+            size="lg"
+            disabled={!current.canAnswer || pending}
+            onClick={() => void answer('CORRECT')}
+          >
             答对 Enter
           </Button>
-          <Button variant="secondary" disabled={!current.canAnswer || pending} onClick={() => void answer('SKIPPED')}>
+          <Button
+            size="lg"
+            variant="secondary"
+            disabled={!current.canAnswer || pending}
+            onClick={() => void answer('SKIPPED')}
+          >
             跳过 →
           </Button>
           {current.canPause ? (
             <Button
+              size="lg"
               variant="secondary"
               disabled={pending}
-              onClick={() => void run(() => window.gameAPI.games.pause({ gameId, commandId: newCommandId() }))}
+              onClick={() =>
+                void run(() => window.gameAPI.games.pause({ gameId, commandId: newCommandId() }))
+              }
             >
               暂停 Space
             </Button>
           ) : null}
           {current.canResume ? (
             <Button
+              size="lg"
               disabled={pending}
-              onClick={() => void run(() => window.gameAPI.games.resume({ gameId, commandId: newCommandId() }))}
+              onClick={() =>
+                void run(() => window.gameAPI.games.resume({ gameId, commandId: newCommandId() }))
+              }
             >
               继续
             </Button>
           ) : null}
           <Button
+            size="lg"
             variant="ghost"
             disabled={!current.canUndo || pending}
-            onClick={() => void run(() => window.gameAPI.games.undoLastAnswer({ gameId, commandId: newCommandId() }))}
+            onClick={() =>
+              void run(() =>
+                window.gameAPI.games.undoLastAnswer({ gameId, commandId: newCommandId() })
+              )
+            }
           >
             撤销
           </Button>
@@ -304,11 +378,11 @@ export function GameSessionPage(): React.JSX.Element {
 
   function abortBlock(current: PlaySnapshot): React.JSX.Element | null {
     if (current.phase === 'running') {
-      return <p className="mt-6 text-center text-sm text-brand-muted">中止整场前请先暂停。</p>
+      return <p className="mt-4 text-center text-sm text-first-02">中止整场前请先暂停。</p>
     }
     if (!abortArmed) {
       return (
-        <div className="mt-6 text-center">
+        <div className="mt-4 text-center">
           <Button variant="ghost" onClick={() => setAbortArmed(true)}>
             中止整场
           </Button>
@@ -316,13 +390,17 @@ export function GameSessionPage(): React.JSX.Element {
       )
     }
     return (
-      <div className="mt-6 flex flex-wrap justify-center gap-3">
+      <div className="mt-4 flex flex-wrap justify-center gap-3">
         <Button
           variant="destructive"
           disabled={pending}
           onClick={() =>
             void run(() =>
-              window.gameAPI.games.abort({ gameId, commandId: newCommandId(), reason: '主持人中止' })
+              window.gameAPI.games.abort({
+                gameId,
+                commandId: newCommandId(),
+                reason: '主持人中止'
+              })
             ).then(() => {
               setAbortArmed(false)
             })
@@ -340,9 +418,9 @@ export function GameSessionPage(): React.JSX.Element {
 
 function Stat({ label, value }: { label: string; value: number }): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-brand-muted/20 bg-brand-bg/40 px-3 py-3">
-      <div className="text-xs text-brand-muted">{label}</div>
-      <div className="text-2xl font-semibold">
+    <div className="rounded-[12px] border border-line bg-surface px-3 py-3">
+      <div className="text-xs text-first-03">{label}</div>
+      <div className="text-2xl font-semibold text-gold">
         <ScoreValue value={value} />
       </div>
     </div>

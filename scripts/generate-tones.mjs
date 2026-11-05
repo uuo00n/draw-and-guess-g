@@ -42,6 +42,16 @@ function render(notes) {
 }
 
 const tones = {
+  'game-start': [
+    { frequency: 392, seconds: 0.12, volume: 0.3 },
+    { frequency: 523.25, seconds: 0.12, volume: 0.32 },
+    { frequency: 659.25, seconds: 0.2, volume: 0.34 }
+  ],
+  'game-end': [
+    { frequency: 659.25, seconds: 0.14, volume: 0.28 },
+    { frequency: 523.25, seconds: 0.14, volume: 0.28 },
+    { frequency: 392, seconds: 0.22, volume: 0.26 }
+  ],
   start: [{ frequency: 523.25, seconds: 0.16, volume: 0.35 }],
   correct: [
     { frequency: 659.25, seconds: 0.09, volume: 0.32 },

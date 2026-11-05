@@ -78,6 +78,22 @@ describe('createGame', () => {
     ).map((q) => q.question_text_snapshot)
     expect(after).toEqual(before)
   })
+
+  it('freezes a 30 second challenge', () => {
+    const db = openMemoryDatabase()
+    const bankId = seedBank(db, ['苹果'])
+    const snapshot = createGame(db, {
+      bankId,
+      roundCount: 1,
+      turnDurationSec: 30,
+      scoreMode: 'UNIFORM',
+      teams: [
+        { name: '红队', color: '#ff555f', sortOrder: 0 },
+        { name: '蓝队', color: '#4da3ff', sortOrder: 1 }
+      ]
+    })
+    expect(snapshot.turnDurationMs).toBe(30_000)
+  })
 })
 
 describe('commitImportRows', () => {

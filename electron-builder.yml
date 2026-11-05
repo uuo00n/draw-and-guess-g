@@ -1,5 +1,5 @@
 appId: com.genpact.draw-and-guess
-productName: draw-and-guess
+productName: 你画我猜
 directories:
   buildResources: build
 files:
@@ -24,8 +24,8 @@ win:
         - x64
 nsis:
   artifactName: ${productName}-${version}-win-x64-Setup.${ext}
-  shortcutName: ${productName}
-  uninstallDisplayName: ${productName}
+  shortcutName: 你画我猜
+  uninstallDisplayName: 你画我猜
   createDesktopShortcut: always
 portable:
   artifactName: ${productName}-${version}-win-x64-Portable.${ext}

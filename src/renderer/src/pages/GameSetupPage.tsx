@@ -1,20 +1,99 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { GameSnapshot } from '@shared/schemas/games'
 import type { QuestionBankSummary } from '@shared/schemas/questions'
 import {
+  clampTurnDurationSec,
   ROUND_COUNT_MAX,
   ROUND_COUNT_MIN,
   TEAM_COUNT_MAX,
   TEAM_COUNT_MIN,
-  TURN_DURATION_MS_MAX,
-  TURN_DURATION_MS_MIN
+  TURN_DURATION_SEC_MAX,
+  TURN_DURATION_SEC_MIN,
+  TURN_DURATION_SEC_STEP
 } from '@shared/constants'
 import { PageShell, StatPill } from '@renderer/components/layout/AppShell'
 import { Button } from '@renderer/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@renderer/components/ui/card'
 import { Input } from '@renderer/components/ui/input'
+import { Select } from '@renderer/components/ui/select'
+import { StatusNote } from '@renderer/components/ui/status-note'
 import { useGameSetupStore } from '@renderer/stores/game-setup-store'
+
+function DurationField(): React.JSX.Element {
+  const seconds = useGameSetupStore((state) => state.turnDurationSec)
+  const setSeconds = useGameSetupStore((state) => state.setTurnDurationSec)
+  const [text, setText] = useState(String(seconds))
+  const editing = useRef(false)
+
+  useEffect(() => {
+    if (!editing.current) setText(String(seconds))
+  }, [seconds])
+
+  const commit = (raw: string): void => {
+    const parsed = Number.parseInt(raw, 10)
+    const next = Number.isFinite(parsed) ? clampTurnDurationSec(parsed) : seconds
+    setSeconds(next)
+    setText(String(next))
+  }
+
+  const stepBy = (direction: -1 | 1): void => {
+    const current = useGameSetupStore.getState().turnDurationSec
+    setSeconds(current + direction * TURN_DURATION_SEC_STEP)
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        aria-label="减少 10 秒"
+        disabled={seconds <= TURN_DURATION_SEC_MIN}
+        onClick={() => stepBy(-1)}
+      >
+        −
+      </Button>
+      <Input
+        type="text"
+        inputMode="numeric"
+        aria-label="挑战时长（秒）"
+        min={TURN_DURATION_SEC_MIN}
+        max={TURN_DURATION_SEC_MAX}
+        value={text}
+        onFocus={() => {
+          editing.current = true
+        }}
+        onChange={(event) => {
+          const raw = event.target.value.replace(/[^\d]/g, '')
+          setText(raw)
+          const parsed = Number.parseInt(raw, 10)
+          if (
+            Number.isFinite(parsed) &&
+            parsed >= TURN_DURATION_SEC_MIN &&
+            parsed <= TURN_DURATION_SEC_MAX
+          ) {
+            setSeconds(parsed)
+          }
+        }}
+        onBlur={() => {
+          editing.current = false
+          commit(text)
+        }}
+      />
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        aria-label="增加 10 秒"
+        disabled={seconds >= TURN_DURATION_SEC_MAX}
+        onClick={() => stepBy(1)}
+      >
+        +
+      </Button>
+    </div>
+  )
+}
 
 export function GameSetupPage(): React.JSX.Element {
   const store = useGameSetupStore()
@@ -124,27 +203,29 @@ export function GameSetupPage(): React.JSX.Element {
   }
 
   return (
-    <PageShell title="新建比赛" subtitle="队伍 2–12 · 轮次 1–5 · 创建时冻结题目队列">
-      <div className="mb-4 flex gap-3">
+    <PageShell title="比赛配置" subtitle="Genpact Dalian Digital · 队伍 2–12 · 创建时冻结题目队列">
+      <div className="mb-4">
         <Button asChild variant="ghost">
           <Link to="/">返回首页</Link>
         </Button>
       </div>
 
       {error ? (
-        <div className="mb-4 rounded-md border border-brand-accent-strong/40 bg-brand-accent-strong/10 px-4 py-3 text-sm">
+        <StatusNote tone="danger" className="mb-4">
           {error}
-        </div>
+        </StatusNote>
       ) : null}
 
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
         <Card className="space-y-6">
           <div>
             <CardTitle>队伍配置</CardTitle>
-            <CardDescription className="mt-1">名称非空且不可重复，可调整颜色与顺序</CardDescription>
+            <CardDescription className="mt-1">
+              名称非空且不可重复。颜色和出场顺序在创建时冻结。
+            </CardDescription>
           </div>
           <div className="flex items-center gap-3">
-            <span className="text-sm text-brand-muted">队伍数</span>
+            <span className="text-sm text-first-03">队伍数</span>
             <Button
               variant="secondary"
               size="sm"
@@ -158,7 +239,9 @@ export function GameSetupPage(): React.JSX.Element {
               min={TEAM_COUNT_MIN}
               max={TEAM_COUNT_MAX}
               value={store.teamCount}
-              onChange={(e) => store.setTeamCount(Number.parseInt(e.target.value, 10) || TEAM_COUNT_MIN)}
+              onChange={(e) =>
+                store.setTeamCount(Number.parseInt(e.target.value, 10) || TEAM_COUNT_MIN)
+              }
               className="w-20 text-center"
             />
             <Button
@@ -174,17 +257,19 @@ export function GameSetupPage(): React.JSX.Element {
             {store.teams.map((team, index) => (
               <div
                 key={index}
-                className="grid gap-3 rounded-lg border border-brand-muted/15 bg-brand-bg/30 p-3 md:grid-cols-[1fr_auto_auto_auto]"
+                className="grid gap-3 rounded-[12px] border border-line bg-midnight/40 p-3 md:grid-cols-[1fr_auto_auto_auto]"
+                style={{ boxShadow: `inset 3px 0 0 ${team.color}` }}
               >
                 <Input
                   value={team.name}
+                  aria-label={`队伍 ${index + 1} 名称`}
                   onChange={(e) => store.updateTeam(index, { name: e.target.value })}
                 />
                 <input
                   type="color"
                   value={team.color}
                   onChange={(e) => store.updateTeam(index, { color: e.target.value })}
-                  className="h-10 w-14 cursor-pointer rounded border border-brand-muted/20 bg-transparent"
+                  className="h-10 w-14 cursor-pointer rounded-[10px] border border-first-01 bg-transparent"
                   aria-label={`队伍 ${index + 1} 颜色`}
                 />
                 <Button variant="secondary" size="sm" onClick={() => store.moveTeam(index, -1)}>
@@ -198,24 +283,20 @@ export function GameSetupPage(): React.JSX.Element {
           </div>
         </Card>
 
-        <div className="space-y-6">
+        <div className="space-y-6 xl:sticky xl:top-4 xl:self-start">
           <Card className="space-y-4">
             <CardTitle>规则与题库</CardTitle>
-            <label className="block text-sm text-brand-muted">题库</label>
-            <select
-              className="w-full rounded-md border border-brand-muted/30 bg-brand-surface px-3 py-2 text-sm"
-              value={store.bankId ?? ''}
-              onChange={(e) => store.setBankId(e.target.value)}
-            >
+            <label className="block text-sm text-first-03">题库</label>
+            <Select value={store.bankId ?? ''} onChange={(e) => store.setBankId(e.target.value)}>
               {banks.map((bank) => (
                 <option key={bank.id} value={bank.id}>
                   {bank.name}（{bank.activeQuestionCount} 题）
                 </option>
               ))}
-            </select>
+            </Select>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-sm text-brand-muted">轮数</label>
+                <label className="text-sm text-first-03">轮数</label>
                 <Input
                   type="number"
                   min={ROUND_COUNT_MIN}
@@ -225,21 +306,13 @@ export function GameSetupPage(): React.JSX.Element {
                 />
               </div>
               <div>
-                <label className="text-sm text-brand-muted">挑战时长（秒）</label>
-                <Input
-                  type="number"
-                  min={TURN_DURATION_MS_MIN / 1000}
-                  max={TURN_DURATION_MS_MAX / 1000}
-                  value={store.turnDurationSec}
-                  onChange={(e) =>
-                    store.setTurnDurationSec(Number.parseInt(e.target.value, 10) || 60)
-                  }
-                />
+                <label className="text-sm text-first-03">挑战时长（秒）</label>
+                <DurationField />
               </div>
             </div>
             {categories.length > 0 ? (
               <div>
-                <p className="mb-2 text-sm text-brand-muted">分类筛选（可选）</p>
+                <p className="mb-2 text-sm text-first-03">分类筛选（可选）</p>
                 <div className="flex flex-wrap gap-2">
                   {categories.map((cat) => {
                     const active = store.categoryFilter.includes(cat)
@@ -247,12 +320,9 @@ export function GameSetupPage(): React.JSX.Element {
                       <button
                         key={cat}
                         type="button"
+                        data-active={active ? 'true' : 'false'}
                         onClick={() => store.toggleCategory(cat)}
-                        className={`rounded-full px-3 py-1 text-xs ${
-                          active
-                            ? 'bg-brand-accent text-brand-bg'
-                            : 'border border-brand-muted/30 text-brand-muted'
-                        }`}
+                        className="gp-chip"
                       >
                         {cat}
                       </button>
@@ -264,10 +334,13 @@ export function GameSetupPage(): React.JSX.Element {
           </Card>
 
           <div className="grid grid-cols-2 gap-3">
-            <StatPill label="挑战场次" value={`${store.teamCount} × ${store.roundCount} = ${challengeCount}`} />
+            <StatPill
+              label="挑战场次"
+              value={`${store.teamCount} × ${store.roundCount} = ${challengeCount}`}
+            />
             <StatPill label="可用题目" value={availableCount} />
           </div>
-          <p className="text-sm text-brand-muted">顺序预览：{schedulePreview} … 每轮重复</p>
+          <p className="text-sm text-first-03">顺序预览：{schedulePreview} … 每轮重复</p>
           <Button size="lg" className="w-full" onClick={() => void onCreate()}>
             创建并冻结题目队列
           </Button>
@@ -275,16 +348,16 @@ export function GameSetupPage(): React.JSX.Element {
       </div>
 
       {created ? (
-        <Card className="mt-8 border-brand-accent/40">
+        <Card className="mt-8 border-gold/50">
           <CardTitle>已创建 · {created.name}</CardTitle>
           <CardDescription className="mt-2">
-            状态 {created.status} · 队列 {created.queueSize} 题 · 计划挑战 {created.plannedTurnCount}{' '}
-            场 · 首场 {created.turns[0]?.status}
+            状态 {created.status} · 队列 {created.queueSize} 题 · 计划挑战{' '}
+            {created.plannedTurnCount} 场 · 首场 {created.turns[0]?.status}
           </CardDescription>
           <Button asChild className="mt-4">
             <Link to={`/session/${created.id}`}>进入准备页</Link>
           </Button>
-          <ol className="mt-4 max-h-48 overflow-auto text-sm text-brand-muted">
+          <ol className="mt-4 max-h-48 space-y-1 overflow-auto text-sm text-first-03">
             {created.turns.slice(0, 12).map((turn) => {
               const team = created.teams.find((t) => t.id === turn.teamId)
               return (

@@ -1,7 +1,8 @@
 import { writeFileSync } from 'node:fs'
-import { app, BrowserWindow, dialog, powerSaveBlocker, shell } from 'electron'
+import { app, BrowserWindow, dialog, nativeImage, powerSaveBlocker, shell } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { APP_DISPLAY_NAME, APP_WINDOW_TITLE } from '../shared/constants'
 import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './database/connection'
 import { checkpointRunning, recoverDatabase } from './domain/game-engine'
@@ -18,6 +19,18 @@ if (process.env.E2E_USER_DATA) {
   app.setPath('userData', process.env.E2E_USER_DATA)
 }
 
+if (process.platform === 'darwin') {
+  app.setName(APP_DISPLAY_NAME)
+}
+
+function applyAppIcon(): void {
+  const image = nativeImage.createFromPath(icon)
+  if (image.isEmpty()) return
+  if (process.platform === 'darwin' && app.dock) {
+    app.dock.setIcon(image)
+  }
+}
+
 let db: ReturnType<typeof openDatabase> | null = null
 
 export function getDb() {
@@ -32,8 +45,10 @@ function createWindow(): void {
     minWidth: 1024,
     minHeight: 640,
     show: false,
+    backgroundColor: '#161916',
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    title: APP_WINDOW_TITLE,
+    icon,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -88,6 +103,7 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.genpact.draw-and-guess')
+  applyAppIcon()
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
@@ -115,7 +131,8 @@ app.whenReady().then(() => {
     if (!db) return
     checkpointRunning(db, timerEngine)
     const timing = timerEngine.activeGameIds().length > 0
-    if (timing && sleepBlocker == null) sleepBlocker = powerSaveBlocker.start('prevent-display-sleep')
+    if (timing && sleepBlocker == null)
+      sleepBlocker = powerSaveBlocker.start('prevent-display-sleep')
     if (!timing && sleepBlocker != null) {
       if (powerSaveBlocker.isStarted(sleepBlocker)) powerSaveBlocker.stop(sleepBlocker)
       sleepBlocker = null

@@ -3,7 +3,14 @@ import type { GameUiEvent } from './schemas/play'
 export const effectLevels = ['off', 'low', 'normal'] as const
 export type EffectLevel = (typeof effectLevels)[number]
 
-export type EffectCue = 'correct' | 'skip' | 'start' | 'time-up' | 'champion'
+export type EffectCue =
+  | 'correct'
+  | 'skip'
+  | 'start'
+  | 'game-start'
+  | 'game-end'
+  | 'time-up'
+  | 'champion'
 
 export type EffectPlan = {
   accept: boolean
@@ -40,7 +47,10 @@ export function planCommittedEffects(
   } else if (event.kind === 'ANSWER_ACCEPTED' && event.verdict === 'SKIPPED') {
     if (!options.muted) sounds.push('skip')
   } else if (event.kind === 'TURN_STARTED') {
-    if (!options.muted) sounds.push('start')
+    if (!options.muted) {
+      if (event.turnSequenceNo === 1) sounds.push('game-start')
+      else sounds.push('start')
+    }
   } else if (event.verdict === 'TIMEOUT' || event.kind === 'TURN_ENDED') {
     if (!options.muted) sounds.push('time-up')
   }
@@ -52,6 +62,10 @@ export function planCommittedEffects(
       confetti = 'champion'
       championMark = true
     }
+  }
+
+  if (event.kind === 'GAME_FINISHED' || event.kind === 'GAME_FINISHED_EARLY') {
+    if (!options.muted) sounds.push('game-end')
   }
 
   return { accept: true, sounds, confetti, championMark }

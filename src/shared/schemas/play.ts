@@ -100,6 +100,7 @@ export const gameUiEventSchema = z.object({
     'GAME_ABORTED'
   ]),
   verdict: z.enum(['CORRECT', 'SKIPPED', 'TIMEOUT']).optional(),
+  turnSequenceNo: z.number().int().positive().optional(),
   emittedAt: z.string()
 })
 

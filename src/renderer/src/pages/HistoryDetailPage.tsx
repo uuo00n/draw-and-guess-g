@@ -3,6 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import type { GameHistory } from '@shared/schemas/history'
 import { PageShell } from '@renderer/components/layout/AppShell'
 import { Button } from '@renderer/components/ui/button'
+import { Select } from '@renderer/components/ui/select'
+import { cn } from '@renderer/lib/utils'
 
 export function HistoryDetailPage(): React.JSX.Element {
   const { gameId = '' } = useParams()
@@ -16,7 +18,9 @@ export function HistoryDetailPage(): React.JSX.Element {
     void window.gameAPI.games
       .getHistory(gameId)
       .then(setHistory)
-      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : '无法读取详情'))
+      .catch((reason: unknown) =>
+        setError(reason instanceof Error ? reason.message : '无法读取详情')
+      )
   }, [gameId])
 
   const questions = useMemo(() => {
@@ -29,7 +33,7 @@ export function HistoryDetailPage(): React.JSX.Element {
   }, [history, roundNo, teamId])
 
   if (!history) {
-    return <div className="app-shell text-brand-muted">{error ?? '正在读取记录…'}</div>
+    return <div className="app-shell text-first-03">{error ?? '正在读取记录…'}</div>
   }
 
   const rounds = [...new Set(history.turns.map((turn) => turn.roundNo))]
@@ -45,40 +49,65 @@ export function HistoryDetailPage(): React.JSX.Element {
           <Link to="/history">返回列表</Link>
         </Button>
       </div>
-      {exportNote ? <p className="mb-4 text-sm text-brand-muted">{exportNote}</p> : null}
+      {exportNote ? <p className="mb-4 text-sm text-first-03">{exportNote}</p> : null}
       <div className="mb-6 grid gap-3 text-sm md:grid-cols-4">
         <Info label="状态" value={`${history.status} / ${history.statusLabel}`} />
         <Info label="结束原因" value={history.endReason ?? '—'} />
-        <Info label="计划 / 正常完成 / 未进行" value={`${history.plannedTurnCount} / ${history.finishedTurnCount} / ${history.notPlayedTurnCount}`} />
+        <Info
+          label="计划 / 正常完成 / 未进行"
+          value={`${history.plannedTurnCount} / ${history.finishedTurnCount} / ${history.notPlayedTurnCount}`}
+        />
         <Info label="授予冠军" value={history.showChampion ? '是' : '否'} />
       </div>
 
       <section className="mb-8">
         <h2 className="mb-3 text-xl font-semibold">队伍</h2>
         <div className="grid gap-3 md:grid-cols-2">
-          {history.teams.map((team) => (
-            <div key={team.id} className="rounded-lg border border-brand-muted/20 px-4 py-3">
-              <div className="flex items-center justify-between">
-                <span>
-                  第 {team.rank} 名 · {team.name}
-                </span>
-                <span className="text-2xl font-semibold tabular-nums">{team.totalScore}</span>
+          {history.teams.map((team) => {
+            const champion = history.showChampion && team.rank === 1
+            return (
+              <div
+                key={team.id}
+                className={cn(
+                  'rounded-[16px] border px-4 py-3',
+                  champion ? 'border-gold bg-elevated' : 'border-line bg-surface'
+                )}
+                style={{ boxShadow: `inset 3px 0 0 ${team.color}` }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <span>
+                    第 {team.rank} 名 · {team.name}
+                    {champion ? (
+                      <span className="ml-2 text-xs tracking-[0.14em] text-gold">冠军</span>
+                    ) : null}
+                  </span>
+                  <span
+                    className={cn(
+                      'text-2xl font-semibold tabular-nums',
+                      champion ? 'text-gold' : 'text-morning'
+                    )}
+                  >
+                    {team.totalScore}
+                  </span>
+                </div>
+                <p className="mt-1 text-sm text-first-03">
+                  正常完成 {team.finishedTurns} 次 · 未进行 {team.notPlayedTurns} 次
+                </p>
               </div>
-              <p className="mt-1 text-sm text-brand-muted">
-                正常完成 {team.finishedTurns} 次 · 未进行 {team.notPlayedTurns} 次
-              </p>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </section>
 
       <section className="mb-8">
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <h2 className="text-xl font-semibold">逐题</h2>
-          <select
-            className="h-10 rounded-md border border-brand-muted/30 bg-brand-surface px-3"
+          <Select
+            className="w-auto min-w-36"
             value={roundNo}
-            onChange={(event) => setRoundNo(event.target.value === 'all' ? 'all' : Number(event.target.value))}
+            onChange={(event) =>
+              setRoundNo(event.target.value === 'all' ? 'all' : Number(event.target.value))
+            }
           >
             <option value="all">全部轮次</option>
             {rounds.map((round) => (
@@ -86,9 +115,9 @@ export function HistoryDetailPage(): React.JSX.Element {
                 第 {round} 轮
               </option>
             ))}
-          </select>
-          <select
-            className="h-10 rounded-md border border-brand-muted/30 bg-brand-surface px-3"
+          </Select>
+          <Select
+            className="w-auto min-w-36"
             value={teamId}
             onChange={(event) => setTeamId(event.target.value)}
           >
@@ -98,29 +127,29 @@ export function HistoryDetailPage(): React.JSX.Element {
                 {team.name}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] text-left text-sm">
-            <thead className="text-brand-muted">
+        <div className="gp-table-wrap">
+          <table className="gp-table min-w-[760px]">
+            <thead>
               <tr>
-                <th className="border-b border-brand-muted/20 px-3 py-2">序号</th>
-                <th className="border-b border-brand-muted/20 px-3 py-2">题目</th>
-                <th className="border-b border-brand-muted/20 px-3 py-2">状态</th>
-                <th className="border-b border-brand-muted/20 px-3 py-2">判定</th>
-                <th className="border-b border-brand-muted/20 px-3 py-2">轮次</th>
-                <th className="border-b border-brand-muted/20 px-3 py-2">队伍</th>
+                <th>序号</th>
+                <th>题目</th>
+                <th>状态</th>
+                <th>判定</th>
+                <th>轮次</th>
+                <th>队伍</th>
               </tr>
             </thead>
             <tbody>
               {questions.map((question) => (
                 <tr key={question.id}>
-                  <td className="border-b border-brand-muted/10 px-3 py-2">{question.position}</td>
-                  <td className="border-b border-brand-muted/10 px-3 py-2">{question.text}</td>
-                  <td className="border-b border-brand-muted/10 px-3 py-2">{question.state}</td>
-                  <td className="border-b border-brand-muted/10 px-3 py-2">{question.verdict ?? '—'}</td>
-                  <td className="border-b border-brand-muted/10 px-3 py-2">{question.roundNo ?? '—'}</td>
-                  <td className="border-b border-brand-muted/10 px-3 py-2">{question.teamName ?? '—'}</td>
+                  <td className="tabular-nums">{question.position}</td>
+                  <td>{question.text}</td>
+                  <td>{question.state}</td>
+                  <td>{question.verdict ?? '—'}</td>
+                  <td>{question.roundNo ?? '—'}</td>
+                  <td>{question.teamName ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -132,7 +161,7 @@ export function HistoryDetailPage(): React.JSX.Element {
         <h2 className="mb-3 text-xl font-semibold">挑战排程</h2>
         <ul className="space-y-2 text-sm">
           {history.turns.map((turn) => (
-            <li key={turn.id} className="rounded-md border border-brand-muted/20 px-3 py-2">
+            <li key={turn.id} className="rounded-[10px] border border-line bg-surface px-3 py-2">
               第 {turn.roundNo} 轮 · {turn.teamName} · {turn.status}
               {turn.endReason ? ` · ${turn.endReason}` : ''} · 得分 {turn.turnScore}
             </li>
@@ -144,8 +173,9 @@ export function HistoryDetailPage(): React.JSX.Element {
         <h2 className="mb-3 text-xl font-semibold">判定事件</h2>
         <ul className="space-y-2 text-sm">
           {history.events.map((row) => (
-            <li key={row.id} className="rounded-md border border-brand-muted/20 px-3 py-2">
-              {row.occurredAt.slice(11, 19)} · {row.action} · {row.questionText ?? '无题目'} · 分数 {row.scoreDelta}
+            <li key={row.id} className="rounded-[10px] border border-line bg-surface px-3 py-2">
+              {row.occurredAt.slice(11, 19)} · {row.action} · {row.questionText ?? '无题目'} · 分数{' '}
+              {row.scoreDelta}
               {row.reason ? ` · ${row.reason}` : ''}
             </li>
           ))}
@@ -155,11 +185,11 @@ export function HistoryDetailPage(): React.JSX.Element {
       <section>
         <h2 className="mb-3 text-xl font-semibold">分数修正</h2>
         {history.adjustments.length === 0 ? (
-          <p className="text-sm text-brand-muted">没有人工修分记录。</p>
+          <p className="text-sm text-first-03">没有人工修分记录。</p>
         ) : (
           <ul className="space-y-2 text-sm">
             {history.adjustments.map((row) => (
-              <li key={row.id} className="rounded-md border border-brand-muted/20 px-3 py-2">
+              <li key={row.id} className="rounded-[10px] border border-line bg-surface px-3 py-2">
                 {row.teamName} {row.previousTeamScore} → {row.newTeamScore} · {row.reason}
               </li>
             ))}
@@ -182,9 +212,9 @@ export function HistoryDetailPage(): React.JSX.Element {
 
 function Info({ label, value }: { label: string; value: string }): React.JSX.Element {
   return (
-    <div className="rounded-lg border border-brand-muted/20 px-3 py-3">
-      <div className="text-xs text-brand-muted">{label}</div>
-      <div className="mt-1">{value}</div>
+    <div className="rounded-[16px] border border-line bg-surface px-3 py-3">
+      <div className="text-xs tracking-[0.08em] text-first-03 uppercase">{label}</div>
+      <div className="mt-1 text-morning">{value}</div>
     </div>
   )
 }

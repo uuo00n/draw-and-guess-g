@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import {
+  clampTurnDurationSec,
   DEFAULT_ROUND_COUNT,
   DEFAULT_TEAM_COUNT,
   DEFAULT_TURN_DURATION_SEC,
@@ -68,7 +69,8 @@ export const useGameSetupStore = create<GameSetupDraft>((set, get) => ({
     set({ teams: teams.map((team, i) => ({ ...team, sortOrder: i })) })
   },
   setRoundCount: (roundCount) => set({ roundCount }),
-  setTurnDurationSec: (turnDurationSec) => set({ turnDurationSec }),
+  setTurnDurationSec: (turnDurationSec) =>
+    set({ turnDurationSec: clampTurnDurationSec(turnDurationSec) }),
   setBankId: (bankId) => set({ bankId, categoryFilter: [] }),
   toggleCategory: (category) => {
     const current = get().categoryFilter

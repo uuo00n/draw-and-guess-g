@@ -4,9 +4,17 @@ export const ROUND_COUNT_MIN = 1
 export const ROUND_COUNT_MAX = 5
 export const TURN_DURATION_MS_MIN = 30_000
 export const TURN_DURATION_MS_MAX = 300_000
+export const TURN_DURATION_SEC_MIN = TURN_DURATION_MS_MIN / 1000
+export const TURN_DURATION_SEC_MAX = TURN_DURATION_MS_MAX / 1000
+export const TURN_DURATION_SEC_STEP = 10
 export const DEFAULT_TEAM_COUNT = 4
 export const DEFAULT_ROUND_COUNT = 3
 export const DEFAULT_TURN_DURATION_SEC = 60
+
+export function clampTurnDurationSec(value: number): number {
+  if (!Number.isFinite(value)) return DEFAULT_TURN_DURATION_SEC
+  return Math.min(TURN_DURATION_SEC_MAX, Math.max(TURN_DURATION_SEC_MIN, Math.trunc(value)))
+}
 
 export const TEAM_PALETTE = [
   '#FF555F',
@@ -31,3 +39,6 @@ export const IMPORT_MAX_BYTES = 5 * 1024 * 1024
 export const IMPORT_MAX_ROWS = 2000
 
 export const APP_VERSION = '1.0.0'
+/** 任务栏、Dock、安装包与窗口标题使用的显示名 */
+export const APP_DISPLAY_NAME = '你画我猜'
+export const APP_WINDOW_TITLE = `${APP_DISPLAY_NAME} · Genpact Dalian Digital`
