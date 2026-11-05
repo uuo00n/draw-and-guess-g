@@ -5,9 +5,10 @@ describe('Genpact presentation', () => {
   it('keeps the developer credit exact and out of the click path', () => {
     const source = readFileSync('src/renderer/src/components/layout/DeveloperCredit.tsx', 'utf8')
     const css = readFileSync('src/renderer/src/assets/main.css', 'utf8')
-    expect(source).toContain('Developer: Huang Junbo (Intern)')
+    expect(source).toContain('Developer: HuangJunbo · Digital Intern')
+    expect(source).toContain('黄俊博 · 数字化实习生')
     expect(css).toContain('pointer-events: none')
-    expect(css).toContain('font-size: 12px')
+    expect(css).toContain('font-size: 16px')
     expect(css).toContain('#adb1ac')
   })
 
