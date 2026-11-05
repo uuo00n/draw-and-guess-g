@@ -21,6 +21,7 @@ import {
   type TurnRow
 } from './integrity'
 import { authoritativeRemaining, loadPlaySnapshot, resolveTurn } from './play-snapshot'
+import { countAvailableQuestions, UNUSED_QUEUE_QUESTION } from './question-availability'
 import { TimerEngine, timerEngine } from './timer-engine'
 
 export class GameCommandError extends Error {
@@ -230,11 +231,13 @@ function takeNextUnused(db: Database.Database, gameId: string, turnId: string): 
   const row = db
     .prepare(
       `SELECT * FROM game_question_queue
-       WHERE game_id = ? AND state = 'UNUSED'
+       WHERE game_id = ? AND ${UNUSED_QUEUE_QUESTION}
        ORDER BY queue_position LIMIT 1`
     )
     .get(gameId) as QueueRow | undefined
   if (!row) return null
+  db.prepare('INSERT INTO used_questions (normalized_text) VALUES (?)')
+    .run(row.normalized_text_snapshot)
   const at = isoNow()
   const changed = db
     .prepare(
@@ -243,7 +246,7 @@ function takeNextUnused(db: Database.Database, gameId: string, turnId: string): 
        WHERE id = ? AND state = 'UNUSED'`
     )
     .run(turnId, at, row.id)
-  if (changed.changes !== 1) return null
+  if (changed.changes !== 1) throw new GameCommandError('题目分配失败')
   return loadQueueItem(db, row.id)
 }
 
@@ -272,10 +275,7 @@ function concludeAfterTimeUp(db: Database.Database, gameId: string): GameUiEvent
     ).run(isoNow(), gameId)
     return 'GAME_FINISHED'
   }
-  const unused = db
-    .prepare(`SELECT COUNT(*) AS c FROM game_question_queue WHERE game_id = ? AND state = 'UNUSED'`)
-    .get(gameId) as { c: number }
-  if (Number(unused.c) === 0) {
+  if (countAvailableQuestions(db, gameId) === 0) {
     markUnstarted(db, gameId, 'POOL_EXHAUSTED')
     db.prepare(
       `UPDATE games SET status = 'GAME_FINISHED_EARLY', end_reason = 'POOL_EXHAUSTED', ended_at = ? WHERE id = ?`
@@ -294,8 +294,26 @@ function exhaustGame(db: Database.Database, turn: TurnRow, remainingMs: number):
   ).run(remainingMs, isoNow(), turn.id)
   markUnstarted(db, turn.game_id, 'POOL_EXHAUSTED')
   db.prepare(
-    `UPDATE games SET status = 'GAME_FINISHED_EARLY', end_reason = 'POOL_EXHAUSTED', ended_at = ? WHERE id = ?`
-  ).run(isoNow(), turn.game_id)
+    `UPDATE games SET status = 'GAME_FINISHED_EARLY', end_reason = 'POOL_EXHAUSTED', ended_at = ?, current_turn_id = ? WHERE id = ?`
+  ).run(isoNow(), turn.id, turn.game_id)
+}
+
+function finishOnExhaustion(
+  db: Database.Database,
+  input: GameCommandInput,
+  turn: TurnRow,
+  remaining: number,
+  timer: TimerEngine,
+  now: number
+): CommandCore {
+  exhaustGame(db, turn, remaining)
+  timer.disarm(input.gameId)
+  const eventId = randomUUID()
+  writeReceipt(db, { commandId: input.commandId, gameId: input.gameId, eventId, applied: true })
+  return resultOf(
+    db, input.gameId, timer, now, true, eventId, undefined,
+    uiEvent(input.gameId, eventId, 'GAME_FINISHED_EARLY')
+  )
 }
 
 /** One-shot TIMEOUT. Caller must already hold the write transaction. */
@@ -403,14 +421,10 @@ export function startTurn(
     if (!turn || turn.status !== 'TURN_READY') {
       throw new GameCommandError('当前没有可开始的准备挑战', 'INVALID_STATE')
     }
-    const unused = db
-      .prepare(`SELECT COUNT(*) AS c FROM game_question_queue WHERE game_id = ? AND state = 'UNUSED'`)
-      .get(input.gameId) as { c: number }
-    if (Number(unused.c) < 1) {
-      throw new GameCommandError('没有可用题目，不能开始挑战', 'NO_QUESTIONS')
-    }
     const item = takeNextUnused(db, input.gameId, turn.id)
-    if (!item) throw new GameCommandError('没有可用题目，不能开始挑战', 'NO_QUESTIONS')
+    if (!item) {
+      return finishOnExhaustion(db, input, turn, turn.remaining_ms, timer, now)
+    }
     const at = isoNow()
     db.prepare(
       `UPDATE game_turns
@@ -644,7 +658,14 @@ export function resumeTurn(
         uiEvent(input.gameId, timeout.eventId, timeout.kind, 'TIMEOUT')
       )
     }
-    db.prepare(`UPDATE game_turns SET status = 'TURN_RUNNING' WHERE id = ?`).run(turn.id)
+    db.prepare(`UPDATE game_question_queue SET state = 'VOIDED' WHERE id = ? AND state = 'CURRENT'`)
+      .run(turn.current_queue_item_id)
+    const next = takeNextUnused(db, input.gameId, turn.id)
+    if (!next) {
+      return finishOnExhaustion(db, input, turn, turn.remaining_ms, timer, now)
+    }
+    db.prepare(`UPDATE game_turns SET status = 'TURN_RUNNING', current_queue_item_id = ? WHERE id = ?`)
+      .run(next.id, turn.id)
     timer.arm(input.gameId, turn.id, turn.remaining_ms, now)
     const eventId = randomUUID()
     writeReceipt(db, { commandId: input.commandId, gameId: input.gameId, eventId, applied: true })
@@ -734,32 +755,12 @@ export function undoLastAnswer(
       .prepare('SELECT id FROM answer_events WHERE reverts_event_id = ?')
       .get(latest.id) as { id: string } | undefined
     if (reverted) throw new GameCommandError('最近一次判定已经撤销', 'INVALID_STATE')
-    if (!turn.current_queue_item_id) {
-      throw new GameCommandError('没有可作废的当前题', 'INVALID_STATE')
-    }
-    const current = loadQueueItem(db, turn.current_queue_item_id)
     const previous = loadQueueItem(db, latest.queue_item_id)
-    if (!current || current.state !== 'CURRENT' || current.id === previous?.id) {
-      throw new GameCommandError('当前题不是最近判定之后分配的未判定题', 'INVALID_STATE')
-    }
     if (!previous || previous.state !== 'JUDGED') {
-      throw new GameCommandError('上一题不在可恢复状态', 'INVALID_STATE')
+      throw new GameCommandError('上一题无法撤销', 'INVALID_STATE')
     }
-    db.prepare(`UPDATE game_question_queue SET state = 'VOIDED' WHERE id = ?`).run(current.id)
-    insertAnswer(db, {
-      id: randomUUID(),
-      gameId: input.gameId,
-      turnId: turn.id,
-      queueItemId: current.id,
-      commandId: `${input.commandId}:voided`,
-      action: 'VOIDED',
-      scoreDelta: 0,
-      remainingMs: remaining,
-      reason: 'UNDO'
-    })
-    db.prepare(`UPDATE game_question_queue SET state = 'CURRENT', verdict = NULL WHERE id = ?`).run(
-      previous.id
-    )
+    db.prepare(`UPDATE game_question_queue SET state = 'VOIDED', verdict = NULL WHERE id = ?`)
+      .run(previous.id)
     const undoId = randomUUID()
     insertAnswer(db, {
       id: undoId,
@@ -773,9 +774,7 @@ export function undoLastAnswer(
       revertsEventId: latest.id
     })
     addScore(db, turn, -latest.score_delta)
-    db.prepare(
-      `UPDATE game_turns SET current_queue_item_id = ?, remaining_ms = ? WHERE id = ?`
-    ).run(previous.id, remaining, turn.id)
+    db.prepare('UPDATE game_turns SET remaining_ms = ? WHERE id = ?').run(remaining, turn.id)
     writeReceipt(db, { commandId: input.commandId, gameId: input.gameId, eventId: undoId, applied: true })
     return resultOf(db, input.gameId, timer, now, true, undoId)
   })
@@ -805,6 +804,15 @@ export function advanceToNextTeam(
       .get(input.gameId, turn.sequence_no + 1) as TurnRow | undefined
     if (!next || next.status !== 'TURN_PENDING') {
       throw new GameCommandError('没有等待中的下一队', 'INVALID_STATE')
+    }
+    if (countAvailableQuestions(db, input.gameId) === 0) {
+      markUnstarted(db, input.gameId, 'POOL_EXHAUSTED')
+      db.prepare(`UPDATE games SET status = 'GAME_FINISHED_EARLY', end_reason = 'POOL_EXHAUSTED', ended_at = ? WHERE id = ?`)
+        .run(isoNow(), input.gameId)
+      const eventId = randomUUID()
+      writeReceipt(db, { commandId: input.commandId, gameId: input.gameId, eventId, applied: true })
+      return resultOf(db, input.gameId, timer, now, true, eventId, undefined,
+        uiEvent(input.gameId, eventId, 'GAME_FINISHED_EARLY'))
     }
     db.prepare(`UPDATE game_turns SET status = 'TURN_READY' WHERE id = ?`).run(next.id)
     db.prepare('UPDATE games SET current_turn_id = ? WHERE id = ?').run(next.id, input.gameId)
@@ -887,6 +895,31 @@ export function abortGame(
       uiEvent(input.gameId, eventId, 'GAME_ABORTED')
     )
   })
+}
+
+export function pauseRunningForExit(
+  db: Database.Database,
+  timer: TimerEngine,
+  now: number
+): void {
+  const activeGames = timer.activeGameIds()
+  const pendingTimer = new TimerEngine()
+
+  // Pause commands disarm their timer before committing. Use a separate timer until every
+  // pause has committed so a failed save leaves the original deadlines intact.
+  immediate(db, () => {
+    for (const gameId of activeGames) {
+      const turnId = timer.turnId(gameId)
+      const remaining = timer.peek(gameId, now)
+      if (turnId == null || remaining == null) continue
+      pendingTimer.arm(gameId, turnId, remaining, now)
+      const result = pauseTurn(db, { gameId, commandId: randomUUID() }, { timer: pendingTimer, now })
+      if (!result.applied && result.rejectReason !== 'TIMEOUT') {
+        throw new Error(`Unable to pause active game ${gameId}: ${result.rejectReason}`)
+      }
+    }
+  })
+  for (const gameId of activeGames) timer.disarm(gameId)
 }
 
 export function recoverDatabase(db: Database.Database, timer: TimerEngine = timerEngine): string[] {

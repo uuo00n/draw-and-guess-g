@@ -5,7 +5,8 @@ export const questionQuerySchema = paginationSchema.extend({
   bankId: uuidSchema.optional(),
   category: z.string().optional(),
   search: z.string().optional(),
-  activeOnly: z.boolean().optional()
+  activeOnly: z.boolean().optional(),
+  unusedOnly: z.boolean().optional()
 })
 
 export const importRowErrorSchema = z.object({

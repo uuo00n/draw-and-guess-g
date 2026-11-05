@@ -2,7 +2,7 @@ import { statSync } from 'node:fs'
 import Database from 'better-sqlite3'
 import type { AppDatabase } from '../database/connection'
 import { recoverDatabase } from '../domain/game-engine'
-import type { TimerEngine } from '../domain/timer-engine'
+import { TimerEngine } from '../domain/timer-engine'
 
 type BackupDatabase = AppDatabase & {
   backup: (destination: string | AppDatabase) => Promise<unknown>
@@ -41,15 +41,9 @@ export async function restoreDatabaseFile(
 
   await backupDatabaseFile(live, safetyPath)
   replaceWith(live, sourcePath)
-  const foreignKeys = live.pragma('foreign_key_check') as unknown[]
-  if (foreignKeys.length > 0) {
-    replaceWith(live, safetyPath)
-    throw new Error('恢复后的外键检查未通过，已退回覆盖前的数据库')
-  }
   for (const gameId of timer.activeGameIds()) {
     timer.disarm(gameId)
   }
-  recoverDatabase(live, timer)
 }
 
 function replaceWith(live: AppDatabase, sourcePath: string): void {
@@ -57,29 +51,53 @@ function replaceWith(live: AppDatabase, sourcePath: string): void {
     .prepare(
       `SELECT name FROM sqlite_master
        WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+         AND name NOT IN ('schema_migrations', 'used_questions')
        ORDER BY name`
     )
     .all() as Array<{ name: string }>
   const attached = sourcePath.replaceAll('\\', '/').replaceAll("'", "''")
   live.pragma('foreign_keys = OFF')
-  live.exec(`ATTACH DATABASE '${attached}' AS restore_src`)
   try {
-    const copy = live.transaction(() => {
-      for (const table of tables) {
-        live.exec(`DELETE FROM main."${quoteIdent(table.name)}"`)
-      }
-      for (const table of tables) {
-        const present = live
-          .prepare(`SELECT 1 AS ok FROM restore_src.sqlite_master WHERE type = 'table' AND name = ?`)
-          .get(table.name)
-        if (!present) continue
-        const name = quoteIdent(table.name)
-        live.exec(`INSERT INTO main."${name}" SELECT * FROM restore_src."${name}"`)
-      }
-    })
-    copy()
+    live.exec(`ATTACH DATABASE '${attached}' AS restore_src`)
+    try {
+      const copy = live.transaction(() => {
+        const sourceHasTable = live.prepare(
+          `SELECT 1 FROM restore_src.sqlite_master WHERE type = 'table' AND name = ?`
+        )
+        const hasUsageRecords = Boolean(sourceHasTable.get('used_questions'))
+        if (hasUsageRecords) {
+          live.exec(`INSERT INTO main.used_questions (normalized_text)
+            SELECT normalized_text FROM restore_src.used_questions WHERE 1
+            ON CONFLICT(normalized_text) DO NOTHING`)
+        }
+        for (const table of tables) {
+          live.exec(`DELETE FROM main."${quoteIdent(table.name)}"`)
+        }
+        for (const table of tables) {
+          if (!sourceHasTable.get(table.name)) continue
+          const name = quoteIdent(table.name)
+          const columns = live.prepare(`PRAGMA restore_src.table_info("${name}")`)
+            .all() as Array<{ name: string }>
+          const columnList = columns.map(({ name }) => `"${quoteIdent(name)}"`).join(', ')
+          live.exec(`INSERT INTO main."${name}" (${columnList})
+            SELECT ${columnList} FROM restore_src."${name}"`)
+        }
+        if (!hasUsageRecords) {
+          live.exec(`INSERT INTO main.used_questions (normalized_text)
+            SELECT DISTINCT normalized_text_snapshot FROM main.game_question_queue
+            WHERE first_allocated_at IS NOT NULL OR state IN ('CURRENT', 'JUDGED', 'VOIDED')
+            ON CONFLICT(normalized_text) DO NOTHING`)
+        }
+        if ((live.pragma('foreign_key_check') as unknown[]).length > 0) {
+          throw new Error('恢复后的外键检查未通过，已保留恢复前的数据库')
+        }
+        recoverDatabase(live, new TimerEngine())
+      })
+      copy.immediate()
+    } finally {
+      live.exec('DETACH DATABASE restore_src')
+    }
   } finally {
-    live.exec('DETACH DATABASE restore_src')
     live.pragma('foreign_keys = ON')
   }
 }

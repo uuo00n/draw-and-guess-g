@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import useSound from 'use-sound'
 import tickUrl from '@renderer/assets/sounds/tick.wav'
-import startUrl from '@renderer/assets/sounds/start.wav'
 import { useUiSettings } from '@renderer/stores/ui-settings-store'
 
 type TurnReadyCountdownProps = {
@@ -22,7 +21,9 @@ export function TurnReadyCountdown({
   const runId = useRef(0)
   const soundOptions = { volume: 0.45, soundEnabled: !muted, interrupt: true }
   const [playTick] = useSound(tickUrl, soundOptions)
-  const [playStart] = useSound(startUrl, soundOptions)
+  const tick = useEffectEvent(() => {
+    if (!muted) playTick()
+  })
 
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
@@ -35,7 +36,7 @@ export function TurnReadyCountdown({
     const id = ++runId.current
     let remaining = seconds
     setDisplay(remaining)
-    if (!muted) playTick()
+    tick()
 
     const timers: number[] = []
     for (let step = 1; step <= seconds; step += 1) {
@@ -44,12 +45,11 @@ export function TurnReadyCountdown({
           if (runId.current !== id) return
           remaining -= 1
           if (remaining <= 0) {
-            if (!muted) playStart()
             onCompleteRef.current()
             return
           }
           setDisplay(remaining)
-          if (!muted) playTick()
+          tick()
         }, step * 1000)
       )
     }
@@ -57,7 +57,7 @@ export function TurnReadyCountdown({
     return () => {
       for (const timer of timers) window.clearTimeout(timer)
     }
-  }, [active, seconds, muted, playStart, playTick])
+  }, [active, seconds])
 
   if (!active) return null
 

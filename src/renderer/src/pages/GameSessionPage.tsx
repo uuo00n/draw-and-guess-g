@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import type { GameCommandResult, PlaySnapshot } from '@shared/schemas/play'
+import type { PlaySnapshot } from '@shared/schemas/play'
 import { GenpactBrand } from '@renderer/components/branding/GenpactBrand'
 import { ScrollablePageRoot } from '@renderer/components/layout/AppShell'
 import { TeamScoreStrip } from '@renderer/components/TeamScoreStrip'
@@ -22,7 +22,7 @@ import { useTurnClock } from '@renderer/hooks/useTurnClock'
 import { ChampionMark, useSessionEffects } from '@renderer/hooks/useSessionEffects'
 import { useUiSettings } from '@renderer/stores/ui-settings-store'
 import { cn } from '@renderer/lib/utils'
-import { TURN_SKIP_LIMIT } from '@shared/constants'
+import { APP_DISPLAY_NAME, TURN_SKIP_LIMIT } from '@shared/constants'
 import { formatMembersDisplay } from '@renderer/lib/member-display'
 
 function newCommandId(): string {
@@ -31,8 +31,11 @@ function newCommandId(): string {
 
 export function GameSessionPage(): React.JSX.Element {
   const { gameId = '' } = useParams()
-  const { snapshot, error, setSnapshot, setError } = useGameSnapshot(gameId)
-  const [pending, setPending] = useState(false)
+  return <GameSession key={gameId} gameId={gameId} />
+}
+
+function GameSession({ gameId }: { gameId: string }): React.JSX.Element {
+  const { snapshot, error, pending, run } = useGameSnapshot(gameId)
   const [abortArmed, setAbortArmed] = useState(false)
   const [startCountdown, setStartCountdown] = useState(false)
   const [resetTimerConfirmOpen, setResetTimerConfirmOpen] = useState(false)
@@ -41,24 +44,10 @@ export function GameSessionPage(): React.JSX.Element {
     status: snapshot?.currentTurn?.status ?? null,
     authoritativeRemainingMs: snapshot?.currentTurn?.remainingMs ?? 0
   })
-  const { championMark } = useSessionEffects(snapshot, displayRemainingMs)
+  const { championMark } = useSessionEffects(gameId, snapshot, displayRemainingMs)
   const muted = useUiSettings((state) => state.muted)
   const setMuted = useUiSettings((state) => state.setMuted)
   const startTurnAfterCountdown = useRef<(() => void) | null>(null)
-
-  const run = async (action: () => Promise<GameCommandResult>): Promise<void> => {
-    if (pending) return
-    setPending(true)
-    setError(null)
-    try {
-      const result = await action()
-      setSnapshot(result.snapshot)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : '操作失败')
-    } finally {
-      setPending(false)
-    }
-  }
 
   const answer = (verdict: 'CORRECT' | 'SKIPPED'): Promise<void> => {
     if (!snapshot?.currentTurn || !snapshot.currentQuestion || !snapshot.canAnswer)
@@ -125,14 +114,14 @@ export function GameSessionPage(): React.JSX.Element {
       scrollClassName="flex min-h-0 flex-col"
       header={
         <>
-          <header className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <header className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <GenpactBrand variant="wordmark" height={60} />
               <span className="hidden h-7 w-px bg-first-01 sm:block" />
               <p className="min-w-0 text-sm text-first-03 sm:text-base">
-                <span className="text-morning">Genpact Dalian Digital</span>
+                <span className="text-morning">Genpact China Digital</span>
                 <span className="mx-2 text-first-01">|</span>
-                <span className="tracking-[0.12em] text-morning">DRAW &amp; GUESS</span>
+                <span className="tracking-[0.12em] text-morning">{APP_DISPLAY_NAME}</span>
                 <span className="mx-2 text-first-01">|</span>
                 <span className="text-gold">{roundLabel}</span>
               </p>
@@ -154,16 +143,15 @@ export function GameSessionPage(): React.JSX.Element {
           </header>
 
           {error ? (
-            <StatusNote tone="danger" className="mb-3">
+            <StatusNote tone="danger" className="mt-3">
               {error}
             </StatusNote>
           ) : null}
-
-          <TeamScoreStrip snapshot={snapshot} />
         </>
       }
     >
-      <section className="mt-4 flex min-h-0 flex-1 flex-col">{renderPhase(snapshot)}</section>
+      <TeamScoreStrip snapshot={snapshot} />
+      <section className="mt-4 flex flex-1 flex-col">{renderPhase(snapshot)}</section>
       <TurnReadyCountdown
         active={startCountdown}
         onCancel={() => setStartCountdown(false)}
@@ -229,7 +217,7 @@ export function GameSessionPage(): React.JSX.Element {
         <div className={cn('mx-auto w-full max-w-3xl', celebrate && 'gp-award')}>
           <ChampionMark active={championMark && current.showChampion} />
           <p className="text-center text-xs font-semibold tracking-[0.22em] text-first-02">
-            {celebrate ? 'TEAM CHALLENGE' : 'GENPACT DALIAN DIGITAL'}
+            {celebrate ? 'TEAM CHALLENGE' : 'GENPACT CHINA DIGITAL'}
           </p>
           <h2 className="mt-2 text-center text-4xl font-semibold">{title}</h2>
           {celebrate ? (
@@ -296,16 +284,19 @@ export function GameSessionPage(): React.JSX.Element {
             下一位：{current.currentTurn?.teamName}
           </h2>
           {members.length > 0 ? (
-            <p className="mt-4 max-w-3xl text-lg text-first-03">{formatMembersDisplay(members)}</p>
+            <p className="mt-4 max-w-3xl text-xl font-semibold text-white">{formatMembersDisplay(members)}</p>
           ) : null}
           <p className="mt-4 text-first-03">准备页不展示题目。主持人确认后才开始计时。</p>
           <Button
             size="lg"
             className="mt-8"
             disabled={!current.canStart || pending || startCountdown}
-            onClick={() => setStartCountdown(true)}
+            onClick={() => {
+              if (current.unusedCount === 0) startTurnAfterCountdown.current?.()
+              else setStartCountdown(true)
+            }}
           >
-            开始 {seconds} 秒挑战
+            {current.unusedCount === 0 ? '题目已用尽，结算比赛' : `开始 ${seconds} 秒挑战`}
           </Button>
           {abortBlock(current)}
         </div>
@@ -345,8 +336,8 @@ export function GameSessionPage(): React.JSX.Element {
     const syncRemainingSeconds = Math.ceil((current.currentTurn?.remainingMs ?? 0) / 1000)
     const teamColor = current.teams.find((team) => team.id === current.currentTurn?.teamId)?.color
     return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto px-2">
+      <div className="flex flex-1 flex-col">
+        <div className="flex flex-1 flex-col items-center justify-center px-2">
           <p className="flex items-center gap-2 text-lg text-first-03">
             {teamColor ? (
               <span className="h-3 w-3 rounded-full" style={{ backgroundColor: teamColor }} />
@@ -359,7 +350,8 @@ export function GameSessionPage(): React.JSX.Element {
             ) : null}
           </p>
           <h2 className="question-display text-morning">
-            {current.currentQuestion?.text ?? '等待题目'}
+            {current.currentQuestion?.text ??
+              (current.phase === 'paused' ? '继续后显示新题' : '请暂停后继续以换一道新题')}
           </h2>
           <div className="mt-6 shrink-0">
             <CountdownRing
@@ -414,7 +406,7 @@ export function GameSessionPage(): React.JSX.Element {
                 void run(() => window.gameAPI.games.resume({ gameId, commandId: newCommandId() }))
               }
             >
-              继续
+              继续并换题
             </Button>
           ) : null}
           {current.canResetTimer ? (

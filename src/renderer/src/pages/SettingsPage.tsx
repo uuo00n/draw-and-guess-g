@@ -28,6 +28,10 @@ export function SettingsPage(): React.JSX.Element {
   const [note, setNote] = useState<string | null>(null)
   const [clearOpen, setClearOpen] = useState(false)
   const [clearing, setClearing] = useState(false)
+  const [resetUsedOpen, setResetUsedOpen] = useState(false)
+  const [resettingUsed, setResettingUsed] = useState(false)
+  const [resetUsedError, setResetUsedError] = useState<string | null>(null)
+  const [resetUsedCount, setResetUsedCount] = useState<number | null>(null)
   const [replaceOpen, setReplaceOpen] = useState(false)
   const [pendingRoster, setPendingRoster] = useState<TeamRoster | null>(null)
   const [replaceError, setReplaceError] = useState<string | null>(null)
@@ -164,6 +168,16 @@ export function SettingsPage(): React.JSX.Element {
             >
               从备份恢复
             </Button>
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setResetUsedError(null)
+                setResetUsedCount(null)
+                setResetUsedOpen(true)
+              }}
+            >
+              重置已出题记录
+            </Button>
             <Button variant="destructive" onClick={() => setClearOpen(true)}>
               清空所有历史记录
             </Button>
@@ -185,8 +199,8 @@ export function SettingsPage(): React.JSX.Element {
           <DialogHeader>
             <DialogTitle>清空所有历史记录？</DialogTitle>
             <DialogDescription>
-              将删除全部比赛、队伍快照、成员快照、挑战、题目队列、答题记录和修分记录，包括未结束的比赛。题库与当前分组
-              JSON 会保留，磁盘上的备份文件不会删除。此操作不能撤销。
+              将删除全部比赛记录（含未结束的比赛）和已出题记录，之前出过的题将可再次抽取。
+              题库、当前分组和已有备份文件会保留。此操作无法撤销。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -202,7 +216,7 @@ export function SettingsPage(): React.JSX.Element {
                   .clearAllHistory()
                   .then((result) => {
                     setClearOpen(false)
-                    setNote(`已清空 ${result.deletedCount} 场比赛记录`)
+                    setNote(`已清空 ${result.deletedCount} 场比赛记录及已出题记录`)
                     refreshInfo()
                   })
                   .finally(() => setClearing(false))
@@ -211,6 +225,63 @@ export function SettingsPage(): React.JSX.Element {
               {clearing ? '清空中…' : '清空'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={resetUsedOpen} onOpenChange={(open) => !resettingUsed && setResetUsedOpen(open)}>
+        <DialogContent>
+          {resetUsedCount !== null ? (
+            <>
+              <DialogHeader>
+                <DialogTitle>{resetUsedCount === 0 ? '没有已出题记录' : '重置成功'}</DialogTitle>
+                <DialogDescription>
+                  {resetUsedCount === 0
+                    ? '当前没有需要重置的已出题记录。'
+                    : `已重置 ${resetUsedCount} 条已出题记录。之前出过的题可在新比赛中再次抽取。`}
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter>
+                <Button autoFocus onClick={() => setResetUsedOpen(false)}>
+                  确定
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <>
+              <DialogHeader>
+                <DialogTitle>重置已出题记录？</DialogTitle>
+                <DialogDescription>
+                  重置后，出过的题可在新比赛中再次抽取。题库、比赛历史和成绩会保留。
+                </DialogDescription>
+              </DialogHeader>
+              {resetUsedError ? <p role="alert" className="text-sm text-coral">{resetUsedError}</p> : null}
+              <DialogFooter>
+                <Button variant="secondary" disabled={resettingUsed} onClick={() => setResetUsedOpen(false)}>
+                  取消
+                </Button>
+                <Button
+                  variant="destructive"
+                  disabled={resettingUsed}
+                  onClick={() => {
+                    setResettingUsed(true)
+                    setResetUsedError(null)
+                    void window.gameAPI.app.resetUsedQuestions()
+                      .then((count) => {
+                        if (count === null) {
+                          setResetUsedError('还有未结束的比赛，请先结束比赛再重置。')
+                          return
+                        }
+                        setResetUsedCount(count)
+                      })
+                      .catch(() => setResetUsedError('重置失败，请重试。'))
+                      .finally(() => setResettingUsed(false))
+                  }}
+                >
+                  {resettingUsed ? '重置中…' : '确认重置'}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
 

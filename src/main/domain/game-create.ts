@@ -1,3 +1,4 @@
+import { UNUSED_BANK_QUESTION } from './question-availability'
 import { randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import type { CreateGameInput, GameSnapshot } from '../../shared/schemas/games'
@@ -88,7 +89,7 @@ export function createGame(
     SELECT q.id, q.text, q.normalized_text, q.category, q.difficulty, q.points
     FROM questions q
     INNER JOIN bank_questions bq ON bq.question_id = q.id
-    WHERE bq.bank_id = @bankId AND q.active = 1
+    WHERE bq.bank_id = @bankId AND q.active = 1 AND ${UNUSED_BANK_QUESTION}
   `
   const params: Record<string, unknown> = { bankId: input.bankId }
   const placeholders = input.categoryFilter.map((_, i) => `@cat${i}`).join(', ')
@@ -99,7 +100,7 @@ export function createGame(
 
   const questions = db.prepare(questionSql).all(params) as QuestionRow[]
   if (questions.length === 0) {
-    throw new GameCreateError('可用题目为 0，无法创建比赛', 'NO_QUESTIONS')
+    throw new GameCreateError('没有未出过的题目，请补充新词或选择其他分类', 'NO_QUESTIONS')
   }
 
   const schedule = buildChallengeSchedule(

@@ -46,7 +46,7 @@ import {
 } from '../services/question-service'
 import { IMPORT_MAX_BYTES } from '../../shared/constants'
 import { loadCurrentRoster, saveCurrentRoster, RosterValidationError } from '../services/roster-service'
-import { purgeAllGames } from '../services/game-purge'
+import { purgeAllGames, resetUsedQuestions } from '../services/game-purge'
 
 export function registerQuestionHandlers(db: AppDatabase): void {
   ipcMain.handle('questions:importFile', async () => {
@@ -114,10 +114,24 @@ function publish(uiEvent: GameUiEvent | undefined): void {
   }
 }
 
-function settle<T extends { uiEvent?: GameUiEvent }>(result: T): Omit<T, 'uiEvent'> {
+type GameSnapshot = ReturnType<typeof getPlaySnapshot>
+
+function hideQuestionText(snapshot: GameSnapshot): GameSnapshot {
+  const question = snapshot.currentQuestion
+  return question
+    ? { ...snapshot, currentQuestion: { ...question, text: '' } }
+    : snapshot
+}
+
+function settle<T extends { uiEvent?: GameUiEvent; applied: boolean; snapshot: GameSnapshot }>(
+  result: T,
+  revealsQuestion = false
+): Omit<T, 'uiEvent'> {
   publish(result.uiEvent)
   const { uiEvent: _uiEvent, ...rest } = result
-  return rest
+  return revealsQuestion && result.applied
+    ? rest
+    : { ...rest, snapshot: hideQuestionText(result.snapshot) }
 }
 
 export function registerGameHandlers(db: AppDatabase, options: { dataDir: string }): void {
@@ -128,17 +142,17 @@ export function registerGameHandlers(db: AppDatabase, options: { dataDir: string
 
   ipcMain.handle('games:get', (_event, gameId: unknown) => {
     if (typeof gameId !== 'string') throw new Error('gameId must be string')
-    return getPlaySnapshot(db, gameId, { timer: timerEngine })
+    return hideQuestionText(getPlaySnapshot(db, gameId, { timer: timerEngine }))
   })
 
   ipcMain.handle('games:list', () => listGameSummaries(db, timerEngine))
 
   ipcMain.handle('games:startTurn', (_event, raw: unknown) =>
-    settle(startTurn(db, gameCommandInputSchema.parse(raw), { timer: timerEngine }))
+    settle(startTurn(db, gameCommandInputSchema.parse(raw), { timer: timerEngine }), true)
   )
 
   ipcMain.handle('games:submitAnswer', (_event, raw: unknown) =>
-    settle(submitAnswer(db, submitAnswerInputSchema.parse(raw), { timer: timerEngine }))
+    settle(submitAnswer(db, submitAnswerInputSchema.parse(raw), { timer: timerEngine }), true)
   )
 
   ipcMain.handle('games:pause', (_event, raw: unknown) =>
@@ -146,7 +160,7 @@ export function registerGameHandlers(db: AppDatabase, options: { dataDir: string
   )
 
   ipcMain.handle('games:resume', (_event, raw: unknown) =>
-    settle(resumeTurn(db, gameCommandInputSchema.parse(raw), { timer: timerEngine }))
+    settle(resumeTurn(db, gameCommandInputSchema.parse(raw), { timer: timerEngine }), true)
   )
 
   ipcMain.handle('games:resetTurnTimer', (_event, raw: unknown) =>
@@ -241,6 +255,8 @@ export function registerAppHandlers(
   ipcMain.handle('app:clearAllHistory', () => ({
     deletedCount: purgeAllGames(db, options.timer)
   }))
+
+  ipcMain.handle('app:resetUsedQuestions', () => resetUsedQuestions(db))
 
   ipcMain.handle('app:getDataInfo', () => ({
     dbPath: options.dbPath,

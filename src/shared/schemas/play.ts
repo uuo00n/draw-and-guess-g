@@ -40,6 +40,8 @@ export const leaderboardEntrySchema = z.object({
   name: z.string(),
   color: z.string(),
   totalScore: z.number().int(),
+  correctCount: z.number().int().nonnegative(),
+  skipCount: z.number().int().nonnegative(),
   rank: z.number().int()
 })
 

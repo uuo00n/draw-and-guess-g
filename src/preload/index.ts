@@ -133,7 +133,9 @@ const gameAPI = {
         teamRosterSchema.parse(raw)
       ),
     clearAllHistory: (): Promise<{ deletedCount: number }> =>
-      invoke('app:clearAllHistory').then((raw) => clearHistoryResultSchema.parse(raw))
+      invoke('app:clearAllHistory').then((raw) => clearHistoryResultSchema.parse(raw)),
+    resetUsedQuestions: (): Promise<number | null> =>
+      invoke('app:resetUsedQuestions').then((raw) => z.number().int().nonnegative().nullable().parse(raw))
   },
   events: {
     subscribe: (handler: (event: GameUiEvent) => void): (() => void) => {

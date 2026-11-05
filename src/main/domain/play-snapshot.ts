@@ -1,3 +1,4 @@
+import { countAvailableQuestions } from './question-availability'
 import type Database from 'better-sqlite3'
 import { TURN_SKIP_LIMIT } from '../../shared/constants'
 import type { PlayPhase, PlaySnapshot } from '../../shared/schemas/play'
@@ -87,7 +88,7 @@ export function loadPlaySnapshot(
   const lock = getRecoveryLock(db, gameId)
   const turn = resolveTurn(db, game)
   const remainingMs = turn ? authoritativeRemaining(turn, timer, now) : 0
-  const showQuestion = turn?.status === 'TURN_RUNNING' || turn?.status === 'TURN_PAUSED'
+  const showQuestion = !lock && turn?.status === 'TURN_RUNNING' && remainingMs > 0
   const item =
     showQuestion && turn?.current_queue_item_id ? loadQueueItem(db, turn.current_queue_item_id) : null
   const currentQuestion =
@@ -102,16 +103,21 @@ export function loadPlaySnapshot(
 
   const teamName = turn ? (base.teams.find((team) => team.id === turn.team_id)?.name ?? '') : ''
   const phase = derivePhase(game.status, turn?.status ?? null, Boolean(lock))
-  const unusedCount = Number(
-    (
-      db
-        .prepare(
-          `SELECT COUNT(*) AS c FROM game_question_queue WHERE game_id = ? AND state = 'UNUSED'`
-        )
-        .get(gameId) as { c: number }
-    ).c
-  )
-
+  const counts = db
+    .prepare(
+      `SELECT t.team_id AS teamId,
+              SUM(CASE WHEN e.action = 'CORRECT' THEN 1 ELSE 0 END) AS correctCount,
+              SUM(CASE WHEN e.action = 'SKIPPED' THEN 1 ELSE 0 END) AS skipCount
+       FROM answer_events e
+       JOIN game_turns t ON t.id = e.turn_id
+       WHERE e.game_id = ? AND e.action IN ('CORRECT', 'SKIPPED')
+         AND NOT EXISTS (
+           SELECT 1 FROM answer_events u WHERE u.reverts_event_id = e.id
+         )
+       GROUP BY t.team_id`
+    )
+    .all(gameId) as { teamId: string; correctCount: number; skipCount: number }[]
+  const countsByTeam = new Map(counts.map((row) => [row.teamId, row]))
   const ranked = [...base.teams].sort((a, b) => b.totalScore - a.totalScore || a.sortOrder - b.sortOrder)
   let rank = 1
   const leaderboard = ranked.map((team, index) => {
@@ -121,6 +127,8 @@ export function loadPlaySnapshot(
       name: team.name,
       color: team.color,
       totalScore: team.totalScore,
+      correctCount: countsByTeam.get(team.id)?.correctCount ?? 0,
+      skipCount: countsByTeam.get(team.id)?.skipCount ?? 0,
       rank
     }
   })
@@ -161,10 +169,10 @@ export function loadPlaySnapshot(
     Boolean(turn) &&
     (turn?.status === 'TURN_RUNNING' || turn?.status === 'TURN_PAUSED') &&
     (turn?.status !== 'TURN_RUNNING' || remainingMs > 0) &&
-    Boolean(currentQuestion) &&
+    Boolean(turn?.current_queue_item_id) &&
     Boolean(latest) &&
     !latestReverted &&
-    latest?.queue_item_id !== currentQuestion?.queueItemId
+    latest?.queue_item_id !== turn?.current_queue_item_id
 
   const skipCount = turn ? countAction(db, turn.id, 'SKIPPED') : 0
 
@@ -197,7 +205,7 @@ export function loadPlaySnapshot(
     scoreTiedForLead,
     championTeamId: showChampion ? (leaderboard[0]?.teamId ?? null) : null,
     canStart:
-      !lock && phase === 'ready' && unusedCount > 0 && !TERMINAL_GAME.has(game.status),
+      !lock && phase === 'ready' && !TERMINAL_GAME.has(game.status),
     canAdvance: !lock && phase === 'turn-result' && pendingNext > 0 && game.status === 'GAME_ACTIVE',
     canAnswer: !lock && phase === 'running' && Boolean(currentQuestion) && remainingMs > 0,
     canSkip:
@@ -214,6 +222,6 @@ export function loadPlaySnapshot(
       turn?.status === 'TURN_RUNNING'
         ? `${turn.id}:running`
         : `${turn?.id ?? 'none'}:${turn?.status ?? 'none'}:${turn?.remaining_ms ?? 0}`,
-    unusedCount
+    unusedCount: countAvailableQuestions(db, gameId)
   }
 }

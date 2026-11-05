@@ -179,7 +179,8 @@ export function GameSetupPage(): React.JSX.Element {
               category,
               page: 1,
               pageSize: 1,
-              activeOnly: true
+              activeOnly: true,
+              unusedOnly: true
             })
           )
         )
@@ -213,7 +214,7 @@ export function GameSetupPage(): React.JSX.Element {
   const validateBeforeConfirm = (): string | null => {
     if (!store.bankId) return '请选择题库'
     if (store.categoryFilter.length === 0) return '至少选择一个分类'
-    if (availableCount < 1) return '可用题目不足，无法创建比赛'
+    if (availableCount < 1) return '没有未出过的题目，请补充新词或选择其他分类'
     if (!roster) return '分组名单尚未加载'
     if (participatingCount < 1) return '请勾选至少一组本批参赛'
     return null
@@ -262,7 +263,7 @@ export function GameSetupPage(): React.JSX.Element {
   }
 
   return (
-    <PageShell title="比赛配置" subtitle="Genpact Dalian Digital · 固定分组 · 创建时冻结题目队列">
+    <PageShell title="比赛配置" subtitle="Genpact China Digital · 固定分组 · 创建时冻结题目队列">
       <div className="mb-4">
         <Button asChild variant="ghost">
           <Link to="/">返回首页</Link>
@@ -370,7 +371,7 @@ export function GameSetupPage(): React.JSX.Element {
 
           <div className="grid grid-cols-2 gap-3">
             <StatPill label="挑战场次" value={String(challengeCount)} />
-            <StatPill label="可用题目" value={availableCount} />
+            <StatPill label="未出过的题目" value={availableCount} />
           </div>
           <p className="text-sm text-first-03">
             本批顺序预览：{schedulePreview || '—'}

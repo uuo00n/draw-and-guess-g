@@ -1,8 +1,8 @@
-import { Component, useEffect, useRef, useState, type ReactNode } from 'react'
+import { Component, useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
 import confetti from 'canvas-confetti'
 import { Lottie } from 'lottie-react'
 import useSound from 'use-sound'
-import type { PlaySnapshot } from '@shared/schemas/play'
+import type { GameUiEvent, PlaySnapshot } from '@shared/schemas/play'
 import { nextTickSecond, planCommittedEffects, type EffectCue } from '@shared/effects'
 import championMark from '@renderer/assets/champion-mark.json'
 import correctUrl from '@renderer/assets/sounds/correct.wav'
@@ -35,6 +35,7 @@ function burst(kind: 'correct' | 'champion'): void {
 }
 
 export function useSessionEffects(
+  gameId: string,
   snapshot: PlaySnapshot | null,
   displayRemainingMs: number
 ): { championMark: boolean } {
@@ -42,7 +43,8 @@ export function useSessionEffects(
   const effectLevel = useUiSettings((state) => state.effectLevel)
   const [showMark, setShowMark] = useState(false)
   const [championSerial, setChampionSerial] = useState(0)
-  const pendingChampion = useRef<string | null>(null)
+  const pendingChampion = useRef<GameUiEvent | null>(null)
+  const gameEndTimer = useRef<number | undefined>(undefined)
   const lastTick = useRef<number | null>(null)
   const turnId = snapshot?.currentTurn?.id ?? null
   const soundOptions = { volume: 0.45, soundEnabled: !muted, interrupt: true }
@@ -52,7 +54,10 @@ export function useSessionEffects(
   const [playGameStart] = useSound(gameStartUrl, soundOptions)
   const [playGameEnd] = useSound(gameEndUrl, soundOptions)
   const [playTick] = useSound(tickUrl, soundOptions)
-  const [playTimeUp] = useSound(timeUpUrl, soundOptions)
+  const [playTimeUp, { duration: timeUpDuration }] = useSound(timeUpUrl, {
+    ...soundOptions,
+    volume: 0.85
+  })
   const [playChampion] = useSound(championUrl, soundOptions)
 
   const players: Record<EffectCue, () => void> = {
@@ -65,15 +70,27 @@ export function useSessionEffects(
     champion: playChampion
   }
 
-  const playPlan = (plan: ReturnType<typeof planCommittedEffects>): void => {
+  const playDelayedGameEnd = useEffectEvent((): void => {
+    gameEndTimer.current = undefined
+    playGameEnd()
+  })
+
+  const playPlan = useEffectEvent((plan: ReturnType<typeof planCommittedEffects>): void => {
     try {
-      for (const cue of plan.sounds) players[cue]()
+      const followsTimeout = plan.sounds.includes('time-up')
+      for (const cue of plan.sounds) {
+        if (cue === 'game-end' && followsTimeout && timeUpDuration) {
+          gameEndTimer.current = window.setTimeout(playDelayedGameEnd, timeUpDuration + 100)
+        } else {
+          players[cue]()
+        }
+      }
       if (plan.confetti !== 'none') burst(plan.confetti)
       if (plan.championMark) setShowMark(true)
     } catch {
       // 动效失败不回滚已提交的判题。
     }
-  }
+  })
 
   useEffect(() => {
     lastTick.current = null
@@ -81,57 +98,44 @@ export function useSessionEffects(
   }, [turnId])
 
   useEffect(() => {
-    const unsubscribe = window.gameAPI.events.subscribe((event) => {
-      if (snapshot && event.gameId !== snapshot.id) return
-      if (seenEventIds.has(event.eventId)) return
-      seenEventIds.add(event.eventId)
-      if (event.kind === 'GAME_FINISHED') {
-        pendingChampion.current = event.eventId
-        setChampionSerial((value) => value + 1)
-        const plan = planCommittedEffects(event, {
-          alreadySeen: false,
-          showChampion: false,
-          effectLevel,
-          reducedMotion: reducedMotion(),
-          muted
-        })
-        playPlan(plan)
-        return
-      }
-      const plan = planCommittedEffects(event, {
+    return () => window.clearTimeout(gameEndTimer.current)
+  }, [gameId])
+
+  const onCommittedEvent = useEffectEvent((event: GameUiEvent): void => {
+    if (event.gameId !== gameId || seenEventIds.has(event.eventId)) return
+    seenEventIds.add(event.eventId)
+    if (event.kind === 'GAME_FINISHED') {
+      pendingChampion.current = event
+      setChampionSerial((value) => value + 1)
+    }
+    playPlan(
+      planCommittedEffects(event, {
         alreadySeen: false,
         showChampion: false,
         effectLevel,
         reducedMotion: reducedMotion(),
         muted
       })
-      playPlan(plan)
-    })
-    return unsubscribe
-  }, [snapshot?.id, effectLevel, muted])
+    )
+  })
 
   useEffect(() => {
-    if (!pendingChampion.current || !snapshot) return
-    if (snapshot.status !== 'GAME_FINISHED') return
-    if (snapshot.id && pendingChampion.current) {
-      const plan = planCommittedEffects(
-        {
-          eventId: pendingChampion.current,
-          gameId: snapshot.id,
-          kind: 'GAME_FINISHED',
-          emittedAt: new Date().toISOString()
-        },
-        {
-          alreadySeen: false,
-          showChampion: snapshot.showChampion,
-          effectLevel,
-          reducedMotion: reducedMotion(),
-          muted
-        }
-      )
-      pendingChampion.current = null
-      playPlan(plan)
-    }
+    return window.gameAPI.events.subscribe((event) => onCommittedEvent(event))
+  }, [])
+
+  useEffect(() => {
+    const event = pendingChampion.current
+    if (!event || snapshot?.id !== event.gameId || snapshot.status !== 'GAME_FINISHED') return
+    pendingChampion.current = null
+    if (!snapshot.showChampion) return
+    const plan = planCommittedEffects(event, {
+      alreadySeen: false,
+      showChampion: true,
+      effectLevel,
+      reducedMotion: reducedMotion(),
+      muted
+    })
+    playPlan({ ...plan, sounds: plan.sounds.filter((cue) => cue === 'champion') })
   }, [snapshot, effectLevel, muted, championSerial])
 
   useEffect(() => {

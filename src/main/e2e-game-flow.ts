@@ -150,6 +150,10 @@ export function runElectronGameFlow(db: AppDatabase): E2EResult {
     assert(next.snapshot.phase === 'ready', '下一队必须手动进入准备')
     assert(next.snapshot.currentQuestion == null, '准备页仍不展示题目')
     assert(timer.peek(game.id, t0 + DURATION) == null, '准备页不能自动开表')
+    const previousTeam = next.snapshot.leaderboard.find(
+      (team) => team.teamId === skipped.snapshot.currentTurn?.teamId
+    )
+    assert(previousTeam?.correctCount === 1 && previousTeam.skipCount === 1, '换队后保留已完成和跳过数量')
     steps.push('manual-next')
 
     const second = startTurn(
@@ -160,6 +164,7 @@ export function runElectronGameFlow(db: AppDatabase): E2EResult {
     const done = settleTimeout(db, game.id, { timer, now: t0 + DURATION + 5 + DURATION })
     assert(done.snapshot.status === 'GAME_FINISHED', '全部按时间结束才是 GAME_FINISHED')
     assert(done.snapshot.phase === 'final', '应进入结果页')
+    assert(done.uiEvent?.verdict === 'TIMEOUT', '最后一队到时也应发送超时提示事件')
     assert(second.snapshot.currentTurn?.teamName === '第 2 组', '第二组才开始挑战')
     steps.push('final')
 
@@ -189,15 +194,13 @@ export function runElectronGameFlow(db: AppDatabase): E2EResult {
     pauseTurn(db, { gameId: resumeGame.id, commandId: randomUUID() }, { timer, now: t0 + 2000 })
     resumeTurn(db, { gameId: resumeGame.id, commandId: randomUUID() }, { timer, now: t0 + 9000 })
     checkpointRunning(db, timer, t0 + 10_000)
-    const question = getPlaySnapshot(db, resumeGame.id, { timer, now: t0 + 10_000 }).currentQuestion
-      ?.queueItemId
     const positions = db
       .prepare('SELECT queue_position FROM game_question_queue WHERE game_id = ? ORDER BY queue_position')
       .all(resumeGame.id)
     recoverDatabase(db, timer)
     const restored = getPlaySnapshot(db, resumeGame.id, { timer, now: t0 + 10_000 })
     assert(restored.phase === 'paused', '运行中的倒计时重启后应暂停')
-    assert(restored.currentQuestion?.queueItemId === question, '应重展同一题')
+    assert(restored.currentQuestion == null, '恢复后应隐藏已展示题目')
     assert(timer.peek(resumeGame.id, t0 + 10_000) == null, '恢复后不能自动开表')
     const positionsAfter = db
       .prepare('SELECT queue_position FROM game_question_queue WHERE game_id = ? ORDER BY queue_position')

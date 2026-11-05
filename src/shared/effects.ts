@@ -34,6 +34,7 @@ export function planCommittedEffects(
   }
 
   const motionOn = options.effectLevel !== 'off' && !options.reducedMotion
+  const timeUp = event.verdict === 'TIMEOUT' || event.kind === 'TURN_ENDED'
   const sounds: EffectCue[] = []
   let confetti: EffectPlan['confetti'] = 'none'
   let championMark = false
@@ -51,13 +52,13 @@ export function planCommittedEffects(
       if (event.turnSequenceNo === 1) sounds.push('game-start')
       else sounds.push('start')
     }
-  } else if (event.verdict === 'TIMEOUT' || event.kind === 'TURN_ENDED') {
+  } else if (timeUp) {
     if (!options.muted) sounds.push('time-up')
   }
 
   const formalChampion = event.kind === 'GAME_FINISHED' && options.showChampion
   if (formalChampion) {
-    if (!options.muted) sounds.push('champion')
+    if (!options.muted && !timeUp) sounds.push('champion')
     if (motionOn) {
       confetti = 'champion'
       championMark = true

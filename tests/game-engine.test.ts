@@ -13,6 +13,7 @@ import {
   checkpointRunning,
   GameCommandError,
   getPlaySnapshot,
+  pauseRunningForExit,
   pauseTurn,
   recoverDatabase,
   resetTurnTimer,
@@ -22,7 +23,8 @@ import {
   submitAnswer,
   undoLastAnswer
 } from '../src/main/domain/game-engine'
-import { commitImportRows } from '../src/main/services/question-service'
+import { purgeAllGames } from '../src/main/services/game-purge'
+import { commitImportRows, listQuestions } from '../src/main/services/question-service'
 import { makeTestDataDir, testCreateInput } from './test-roster'
 
 const DURATION = 60_000
@@ -72,6 +74,53 @@ function queueStates(db: AppDatabase, gameId: string) {
 }
 
 describe('game core loop', () => {
+  it('excludes used words across games until history is cleared', () => {
+    const db = openMemoryDatabase()
+    const timer = new TimerEngine()
+    const first = seed(db, ['ＡＰＰＬＥ'])
+    const waiting = seed(db, ['apple'])
+    const started = startTurn(db, { gameId: first.id, commandId: randomUUID() }, { timer, now: 0 })
+    expect(started.snapshot.currentQuestion?.text).toBe('ＡＰＰＬＥ')
+    expect(getPlaySnapshot(db, waiting.id, { timer, now: 0 }).unusedCount).toBe(0)
+    const blocked = startTurn(db, { gameId: waiting.id, commandId: randomUUID() }, { timer, now: 0 })
+    expect(blocked.snapshot.endReason).toBe('POOL_EXHAUSTED')
+    expect(blocked.snapshot.currentQuestion).toBeNull()
+    expect(() => seed(db, [' Apple '])).toThrow('没有未出过的题目')
+
+    expect(purgeAllGames(db, timer)).toBe(2)
+    expect(timer.activeGameIds()).toEqual([])
+    expect(listQuestions(db, { unusedOnly: true }).total).toBeGreaterThan(0)
+    const next = seed(db, ['apple'])
+    expect(startTurn(db, { gameId: next.id, commandId: randomUUID() }, { timer, now: 0 })
+      .snapshot.currentQuestion?.text).toBe(started.snapshot.currentQuestion?.text)
+    db.close()
+  })
+
+  it('clears usage left by an older purge even when no games remain', () => {
+    const db = openMemoryDatabase()
+    db.prepare('INSERT INTO used_questions (normalized_text) VALUES (?)').run('apple')
+    expect(purgeAllGames(db, new TimerEngine())).toBe(0)
+    expect(db.prepare('SELECT * FROM used_questions').all()).toEqual([])
+    db.close()
+  })
+
+  it('rolls back permanent usage when allocation fails', () => {
+    const db = openMemoryDatabase()
+    const timer = new TimerEngine()
+    const game = seed(db, ['唯一题'])
+    db.exec(`CREATE TRIGGER fail_allocation BEFORE UPDATE ON game_question_queue
+      WHEN NEW.state = 'CURRENT'
+      BEGIN SELECT RAISE(ABORT, 'test allocation failure'); END;`)
+    expect(() =>
+      startTurn(db, { gameId: game.id, commandId: randomUUID() }, { timer, now: 0 })
+    ).toThrow('test allocation failure')
+    expect(db.prepare('SELECT * FROM used_questions').all()).toEqual([])
+    expect(queueStates(db, game.id)[0]?.state).toBe('UNUSED')
+    db.exec('DROP TRIGGER fail_allocation')
+    expect(startTurn(db, { gameId: game.id, commandId: randomUUID() }, { timer, now: 0 })
+      .snapshot.currentQuestion?.text).toBe('唯一题')
+  })
+
   it('does not double-score a repeated command or a stale second click', () => {
     const db = openMemoryDatabase()
     const timer = new TimerEngine()
@@ -171,13 +220,13 @@ describe('game core loop', () => {
     expect(timeoutsAfter.c).toBe(1)
   })
 
-  it('voids the revealed next question on undo and does not return it to the pool', () => {
+  it('undoes only the previous verdict and keeps the current question', () => {
     const db = openMemoryDatabase()
     const timer = new TimerEngine()
     const game = seed(db, ['苹果', '香蕉', '橙子'])
     const t0 = 3_000_000
     const started = startTurn(db, { gameId: game.id, commandId: randomUUID() }, { timer, now: t0 })
-    const firstText = started.snapshot.currentQuestion!.text
+    const firstId = started.snapshot.currentQuestion!.queueItemId
     const judged = submitAnswer(
       db,
       {
@@ -197,11 +246,11 @@ describe('game core loop', () => {
       { gameId: game.id, commandId: randomUUID() },
       { timer, now: t0 + 4000 }
     )
-    expect(undone.snapshot.currentQuestion?.text).toBe(firstText)
+    expect(undone.snapshot.currentQuestion?.queueItemId).toBe(revealedId)
     expect(undone.snapshot.currentTurn?.remainingMs).toBe(beforeUndo)
     expect(undone.snapshot.teams.find((team) => team.name === '第 1 组')?.totalScore).toBe(0)
     const states = queueStates(db, game.id)
-    expect(states.find((row) => row.id === revealedId)?.state).toBe('VOIDED')
+    expect(states.find((row) => row.id === firstId)?.state).toBe('VOIDED')
     expect(states.filter((row) => row.state === 'CURRENT')).toHaveLength(1)
     const again = submitAnswer(
       db,
@@ -216,7 +265,8 @@ describe('game core loop', () => {
     )
     expect(again.snapshot.currentQuestion?.queueItemId).not.toBe(revealedId)
     expect(again.snapshot.teams.find((team) => team.name === '第 1 组')?.totalScore).toBe(0)
-    expect(queueStates(db, game.id).find((row) => row.id === revealedId)?.state).toBe('VOIDED')
+    expect(queueStates(db, game.id).find((row) => row.id === firstId)?.state).toBe('VOIDED')
+    expect(() => seed(db, ['苹果', '香蕉', '橙子'])).toThrow('没有未出过的题目')
   })
 
   it('keeps a single current question and does not reset the clock on correct or skip', () => {
@@ -347,16 +397,58 @@ describe('game core loop', () => {
     expect(raced.snapshot.teams.every((team) => team.totalScore === 0)).toBe(true)
   })
 
+  it('saves the live remaining time when exiting between checkpoints', () => {
+    const db = openMemoryDatabase()
+    const timer = new TimerEngine()
+    const game = seed(db, ['苹果', '香蕉', '橙子'])
+    const started = startTurn(db, { gameId: game.id, commandId: randomUUID() }, { timer, now: 0 })
+    checkpointRunning(db, timer, 1000)
+
+    pauseRunningForExit(db, timer, 1750)
+    recoverDatabase(db, timer)
+    const paused = getPlaySnapshot(db, game.id, { timer, now: 3000 })
+    expect(paused.phase).toBe('paused')
+    expect(paused.currentTurn?.remainingMs).toBe(DURATION - 1750)
+    expect(timer.activeGameIds()).toEqual([])
+    const resumed = resumeTurn(db, { gameId: game.id, commandId: randomUUID() }, { timer, now: 3000 })
+    expect(resumed.snapshot.currentQuestion?.queueItemId)
+      .not.toBe(started.snapshot.currentQuestion?.queueItemId)
+    db.close()
+  })
+
+  it('keeps the live timer if saving on exit fails', () => {
+    const db = openMemoryDatabase()
+    const timer = new TimerEngine()
+    const game = seed(db, ['苹果', '香蕉', '橙子'])
+    startTurn(db, { gameId: game.id, commandId: randomUUID() }, { timer, now: 0 })
+    db.exec(`CREATE TRIGGER fail_pause BEFORE UPDATE OF status ON game_turns
+      WHEN NEW.status = 'TURN_PAUSED'
+      BEGIN SELECT RAISE(ABORT, 'simulated save failure'); END;`)
+
+    expect(() => pauseRunningForExit(db, timer, 1750)).toThrow('simulated save failure')
+    const running = getPlaySnapshot(db, game.id, { timer, now: 2000 })
+    expect(running.phase).toBe('running')
+    expect(running.currentTurn?.remainingMs).toBe(DURATION - 2000)
+
+    db.exec('DROP TRIGGER fail_pause')
+    pauseRunningForExit(db, timer, DURATION)
+    expect(getPlaySnapshot(db, game.id, { timer, now: DURATION }).currentTurn?.endReason)
+      .toBe('TIME_UP')
+    expect(timer.activeGameIds()).toEqual([])
+    db.close()
+  })
+
   it('pauses without consuming time and restores a running turn as paused', () => {
     const dir = mkdtempSync(join(tmpdir(), 'draw-guess-'))
     const dbPath = join(dir, 'draw-and-guess.db')
     const db = openDatabase(dbPath)
     const timer = new TimerEngine()
-    const game = seed(db, ['苹果', '香蕉'])
+    const game = seed(db, ['苹果', '香蕉', '橙子'])
     const t0 = 8_000_000
-    startTurn(db, { gameId: game.id, commandId: randomUUID() }, { timer, now: t0 })
+    const started = startTurn(db, { gameId: game.id, commandId: randomUUID() }, { timer, now: t0 })
     const paused = pauseTurn(db, { gameId: game.id, commandId: randomUUID() }, { timer, now: t0 + 5000 })
     expect(paused.snapshot.phase).toBe('paused')
+    expect(paused.snapshot.currentQuestion).toBeNull()
     expect(paused.snapshot.currentTurn?.remainingMs).toBe(DURATION - 5000)
     expect(timer.peek(game.id, t0 + 20_000)).toBeNull()
     expect(() =>
@@ -366,7 +458,7 @@ describe('game core loop', () => {
           commandId: randomUUID(),
           gameId: game.id,
           turnId: paused.snapshot.currentTurn!.id,
-          currentQueueItemId: paused.snapshot.currentQuestion!.queueItemId,
+          currentQueueItemId: started.snapshot.currentQuestion!.queueItemId,
           verdict: 'CORRECT'
         },
         { timer, now: t0 + 20_000 }
@@ -382,6 +474,7 @@ describe('game core loop', () => {
     checkpointRunning(db, timer, t0 + 21_000)
 
     const questionId = resumed.snapshot.currentQuestion?.queueItemId
+    expect(questionId).not.toBe(started.snapshot.currentQuestion?.queueItemId)
     const positions = queueStates(db, game.id).map((row) => row.pos)
     db.close()
 
@@ -392,7 +485,7 @@ describe('game core loop', () => {
     expect(notes.some((note) => note.endsWith(':paused'))).toBe(true)
     const restored = getPlaySnapshot(reopened, game.id, { timer: freshTimer, now: 0 })
     expect(restored.phase).toBe('paused')
-    expect(restored.currentQuestion?.queueItemId).toBe(questionId)
+    expect(restored.currentQuestion).toBeNull()
     expect(restored.currentTurn?.remainingMs).toBe(DURATION - 6000)
     expect(freshTimer.peek(game.id, 0)).toBeNull()
     expect(queueStates(reopened, game.id).map((row) => row.pos)).toEqual(positions)
@@ -401,6 +494,23 @@ describe('game core loop', () => {
       .prepare(`SELECT COUNT(*) AS c FROM game_events WHERE action = 'RECOVERED_TO_PAUSED'`)
       .get() as { c: number }
     expect(events.c).toBe(1)
+
+    const afterRestart = resumeTurn(
+      reopened,
+      { gameId: game.id, commandId: randomUUID() },
+      { timer: freshTimer, now: 0 }
+    )
+    expect(afterRestart.snapshot.currentQuestion?.queueItemId).toBeTruthy()
+    expect(afterRestart.snapshot.currentQuestion?.queueItemId).not.toBe(questionId)
+    expect(afterRestart.snapshot.currentTurn?.remainingMs).toBe(DURATION - 6000)
+    pauseTurn(reopened, { gameId: game.id, commandId: randomUUID() }, { timer: freshTimer, now: 1 })
+    const exhausted = resumeTurn(
+      reopened,
+      { gameId: game.id, commandId: randomUUID() },
+      { timer: freshTimer, now: 2 }
+    )
+    expect(exhausted.snapshot.endReason).toBe('POOL_EXHAUSTED')
+    expect(exhausted.snapshot.currentQuestion).toBeNull()
     reopened.close()
   })
 

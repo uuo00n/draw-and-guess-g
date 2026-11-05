@@ -17,6 +17,7 @@ import {
 } from '../src/main/domain/game-engine'
 import { TimerEngine } from '../src/main/domain/timer-engine'
 import { backupDatabaseFile, restoreDatabaseFile } from '../src/main/services/backup-service'
+import { resetUsedQuestions } from '../src/main/services/game-purge'
 import { getHistory, listHistory } from '../src/main/services/history-service'
 import { buildResultsWorkbook } from '../src/main/services/results-export'
 import { commitImportRows } from '../src/main/services/question-service'
@@ -103,6 +104,7 @@ describe('history, export, and backup', () => {
       { timer, now: t0 + 1500 }
     )
     expect(undone.applied).toBe(true)
+    expect(undone.snapshot.leaderboard[0]).toMatchObject({ correctCount: 0, skipCount: 0 })
     settleTimeout(db, finished.id, { timer, now: t0 + DURATION })
     advanceToNextTeam(db, { gameId: finished.id, commandId: randomUUID() }, { timer, now: t0 + DURATION })
     startTurn(db, { gameId: finished.id, commandId: randomUUID() }, { timer, now: t0 + DURATION + 10 })
@@ -150,7 +152,7 @@ describe('history, export, and backup', () => {
 
     const undoneHistory = getHistory(db, finished.id)
     expect(undoneHistory.questions.some((question) => question.state === 'VOIDED')).toBe(true)
-    expect(undoneHistory.events.some((row) => row.action === 'VOIDED')).toBe(true)
+    expect(undoneHistory.events.some((row) => row.action === 'UNDO')).toBe(true)
     expect(undoneHistory.showChampion).toBe(false)
   })
 
@@ -203,6 +205,8 @@ describe('history, export, and backup', () => {
 
     const backupPath = join(dir, 'backup.db')
     await backupDatabaseFile(live, backupPath)
+    const usedAfterBackup = seed(live, ['较晚出过的题'])
+    startTurn(live, { gameId: usedAfterBackup.id, commandId: randomUUID() }, { timer, now: t0 })
     live.prepare(`UPDATE games SET name = '被改掉的名字' WHERE id = ?`).run(game.id)
 
     const safetyPath = join(dir, 'safety.db')
@@ -219,8 +223,74 @@ describe('history, export, and backup', () => {
     expect(turn.status).toBe('TURN_PAUSED')
     expect(timer.activeGameIds()).toEqual([])
     expect(getHistory(live, game.id).name).toBe('团建 苹果')
+    expect(() => seed(live, ['较晚出过的题'])).toThrow('没有未出过的题目')
     live.close()
   })
+
+  it('resets question usage without changing history and keeps the reset in new backups', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'draw-guess-usage-reset-'))
+    const source = openDatabase(join(dir, 'source.db'))
+    const restored = openMemoryDatabase()
+    const timer = new TimerEngine()
+    const game = seed(source, ['可再次出题', '其他题'])
+    expect(resetUsedQuestions(source)).toBeNull()
+
+    const started = startTurn(source, { gameId: game.id, commandId: randomUUID() }, { timer, now: 0 })
+    expect(resetUsedQuestions(source)).toBeNull()
+    expect(timer.activeGameIds()).toEqual([game.id])
+    pauseTurn(source, { gameId: game.id, commandId: randomUUID() }, { timer, now: 1000 })
+    abortGame(source, { gameId: game.id, commandId: randomUUID(), reason: '结束测试比赛' }, { timer, now: 1100 })
+
+    const history = getHistory(source, game.id)
+    expect(resetUsedQuestions(source)).toBe(1)
+    expect(getHistory(source, game.id)).toEqual(history)
+    expect(resetUsedQuestions(source)).toBe(0)
+
+    const backup = join(dir, 'reset.db')
+    await backupDatabaseFile(source, backup)
+    await restoreDatabaseFile(restored, backup, join(dir, 'safety.db'), timer)
+    expect(getHistory(restored, game.id)).toEqual(history)
+    const next = seed(restored, [started.snapshot.currentQuestion!.text])
+    expect(startTurn(restored, { gameId: next.id, commandId: randomUUID() }, { timer, now: 2000 })
+      .snapshot.currentQuestion?.text).toBe(started.snapshot.currentQuestion?.text)
+    source.close()
+    restored.close()
+  })
+
+  it('merges allocated words from a legacy backup and rolls back invalid restores', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'draw-guess-legacy-backup-'))
+    const sourcePath = join(dir, 'legacy.db')
+    const safetyPath = join(dir, 'safety.db')
+    const source = openDatabase(sourcePath)
+    const live = openMemoryDatabase()
+    const timer = new TimerEngine()
+    const archived = seed(source, ['旧备份题'])
+    startTurn(source, { gameId: archived.id, commandId: randomUUID() }, { timer: new TimerEngine() })
+    source.exec('DROP TABLE used_questions; DELETE FROM schema_migrations WHERE version = 5')
+    source.close()
+
+    const local = seed(live, ['本机题'])
+    startTurn(live, { gameId: local.id, commandId: randomUUID() }, { timer })
+    await restoreDatabaseFile(live, sourcePath, safetyPath, timer)
+    expect(live.prepare('SELECT normalized_text FROM used_questions ORDER BY normalized_text').pluck().all())
+      .toEqual(['旧备份题', '本机题'])
+    expect(timer.activeGameIds()).toEqual([])
+
+    const brokenPath = join(dir, 'broken.db')
+    const broken = openDatabase(brokenPath)
+    const invalid = seed(broken, ['无效备份题'])
+    startTurn(broken, { gameId: invalid.id, commandId: randomUUID() }, { timer: new TimerEngine() })
+    broken.pragma('foreign_keys = OFF')
+    broken.prepare("UPDATE games SET bank_id = 'missing'").run()
+    broken.close()
+
+    await expect(restoreDatabaseFile(live, brokenPath, safetyPath, timer)).rejects.toThrow('外键检查未通过')
+    expect(getHistory(live, archived.id).name).toBe('团建 旧备份题')
+    expect(live.prepare('SELECT normalized_text FROM used_questions ORDER BY normalized_text').pluck().all())
+      .toEqual(['旧备份题', '本机题'])
+    live.close()
+  })
+
 })
 
 describe('effect policy', () => {
@@ -248,6 +318,14 @@ describe('effect policy', () => {
     const timeout = planCommittedEffects(event({ kind: 'TURN_ENDED', verdict: 'TIMEOUT' }), base)
     expect(timeout.confetti).toBe('none')
     expect(timeout.sounds).toEqual(['time-up'])
+  })
+
+  it('orders the timeout cue before the match end cue', () => {
+    const finalTimeout = event({ kind: 'GAME_FINISHED', verdict: 'TIMEOUT' })
+    const plan = planCommittedEffects(finalTimeout, base)
+    expect(plan.sounds).toEqual(['time-up', 'game-end'])
+    expect(plan.championMark).toBe(true)
+    expect(planCommittedEffects(finalTimeout, { ...base, muted: true }).sounds).toEqual([])
   })
 
   it('uses game-start only for the first team challenge', () => {

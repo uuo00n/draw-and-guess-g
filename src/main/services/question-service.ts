@@ -1,3 +1,4 @@
+import { UNUSED_BANK_QUESTION } from '../domain/question-availability'
 import { createHash, randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { IMPORT_MAX_ROWS } from '../../shared/constants'
@@ -193,6 +194,8 @@ export function listQuestions(db: Database.Database, query: QuestionQuery): Ques
   if (query.activeOnly !== false) {
     where.push('q.active = 1')
   }
+
+  if (query.unusedOnly) where.push(UNUSED_BANK_QUESTION)
 
   const whereSql = where.join(' AND ')
   const total = (
