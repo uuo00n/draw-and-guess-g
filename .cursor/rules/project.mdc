@@ -1,0 +1,77 @@
+---
+description: 你画我猜的进程边界、冻结玩法与 Windows 打包约束。业务细节以 doc/development_spec.md 为准。
+alwaysApply: true
+---
+
+# 你画我猜执行规则
+
+基线是 `doc/development_spec.md`（v1.2-react-stack）。本规则只锁定不得改写的约束。玩法细节、表字段和 AC 用例以该规格为准，不要另写一份 PRD。
+
+## 技术栈
+
+- Electron + electron-vite + React 19 + TypeScript。路由用 React Router，界面草稿用 Zustand。
+- Tailwind CSS 4 + shadcn/ui + lucide-react。品牌色只用可替换 CSS Token。
+- SQLite 只用 `better-sqlite3`。Excel 用 ExcelJS，CSV 用 Papa Parse，校验用 Zod。
+- 倒计时圆环、撒花、Lottie、过场、数字滚动、音效分别只用 `react-countdown-circle-timer`、`canvas-confetti`、`lottie-react`、`motion`、`react-countup`、`use-sound`。它们都是展示副作用。
+- 沿用现有 npm 与 `package-lock.json`。不要并行引入 pnpm。
+- 禁止 Vue、Pinia、Vue Router、npm 包 `xlsx`、第二数据库、后端服务、远程 API、WebSocket、自动更新。
+
+`better-sqlite3`、ExcelJS、Papa Parse 放在 `dependencies`。Renderer 会被 Vite 打进包的库可以留在 `devDependencies`。
+
+## 进程边界
+
+| 层 | 允许 | 禁止 |
+|---|---|---|
+| `src/main` | 窗口、对话框、文件、SQLite、状态机、权威时钟、导入导出、备份、事务提交后的快照和领域事件 | 把渲染进程当事实来源 |
+| `src/preload` | `contextBridge` 暴露一个类型化的 `window.gameAPI`；入参走 shared Zod | 暴露 `ipcRenderer`、`fs`、`sqlite` |
+| `src/renderer` | 页面、草稿、由快照推导的路由、倒计时插值、已提交 `eventId` 的动效和音效 | `require`、`process`、直接改分、直接抽题、用圆环 `onComplete` 结算 |
+| `src/shared` | 枚举、DTO、Zod schema、常量 | 引用 Electron、React、SQLite |
+
+窗口必须 `contextIsolation: true`、`sandbox: true`、`nodeIntegration: false`。只开一个游戏窗口。导航、外链和新窗口保持白名单。CSP 只加载包内资源。
+
+Main 在事务提交之后才发快照和 `GameUiEvent`。Renderer 用 `useGameSnapshot` 替换本地画面。Zustand 只存表单草稿、筛选和设置，不存第二套总分或题目占用集。
+
+```ts
+// 禁止：Renderer 自己加分或换题
+score += 1
+show(drawNext())
+
+// 必须：提交意图，画面只采用 Main 返回的快照
+await window.gameAPI.games.submitAnswer({
+  commandId, gameId, turnId, currentQueueItemId, verdict: 'CORRECT',
+})
+```
+
+```tsx
+// 圆环只展示。onComplete 不得调用 finishTurn 或 submitAnswer。
+<CountdownCircleTimer onComplete={() => undefined} />
+```
+
+## 冻结业务规则
+
+以下语义来自规格 §0、§2、§7、§8，实现时不得放宽：
+
+1. 单屏公开出题。任意时刻只有一支队伍在挑战，不会同时计时。
+2. 队伍数 `2–12`，由 `teams.length` 派生。默认 4 队。队名非空且场内不重复。轮数 `1–5`，单次挑战 `30–300` 秒，默认 60 秒。
+3. 答对、跳过都立刻切下一题，本队剩余时间不重置。下一队必须由主持人从准备页手动开始。
+4. 创建比赛时冻结队伍、顺序、轮次、时长、计分规则、题目快照和洗牌队列。赛中禁止追加、重排或重建队列。可用题为 0 时禁止创建，也禁止从 `TURN_READY` 启动。
+5. 同一 `normalized_text` 在一场比赛里只能首次分配一次。`CURRENT`、`JUDGED`、`VOIDED` 都算已用。规范化只做 NFKC、trim、合并空白、英文大小写；不做同义词合并。
+6. 无 `UNUSED` 题时，当前挑战进入 `TURN_EXHAUSTED`，未开始挑战进入 `TURN_NOT_PLAYED`，整场进入 `GAME_FINISHED_EARLY`。提前结束不授冠军。只有全部计划挑战都以时间到零正常结束时，整场才是 `GAME_FINISHED`。
+7. Main 先看权威截止时刻。`remainingMs <= 0` 时先做一次性 `TIMEOUT`，拒绝本题加分。暂停不计时。崩溃恢复后的 `TURN_RUNNING` 必须变成 `TURN_PAUSED`，沿用最后落盘的 `remaining_ms` 和当前题，不重新洗牌，不自动开表。
+8. `Ctrl+Z` 只撤销本挑战最近一次尚未被后续判定覆盖的 `correct/skipped`。撤销必须同一事务：当前未判定题改 `VOIDED` 且不回池，上一题恢复为唯一 `CURRENT`，抵销分数，计时不回退。已结算、已耗尽、`timeout` 不可撤销。
+9. 分数、事件、队列状态、当前指针同一事务提交。`commandId` 重复则返回原结果。事件只追加。人工修分写 `score_adjustments`，不改写 `answer_events`，也不改变终态。
+10. 数据库路径是 `app.getPath('userData')/data/draw-and-guess.db`。备份用 better-sqlite3 backup API。发现两个 `CURRENT`、非法指针或分数不一致时进入 `RECOVERY_REQUIRED`，禁止猜题和自动改分。
+
+`GameState` 只有 `GAME_READY | GAME_ACTIVE | GAME_FINISHED | GAME_FINISHED_EARLY | GAME_ABORTED`。`TURN_PAUSED` 是挑战状态。归档用 `archived_at`，不占用 `games.status`。
+
+## 打包
+
+- 目标是 Windows x64 的 NSIS `Setup.exe` 与 Portable.exe。正式包必须在 Windows 上构建并实机验收。macOS 上的交叉打包不能当作发布通过。
+- `better-sqlite3` 按 Electron ABI 重建，并把 `.node` 配进 `asarUnpack`。当前 Electron `44.10.2` 的 `NODE_MODULE_VERSION` 是 `149`。
+- 不要启用自动更新，不要把 `publish.provider: generic` 留在发布配置里。
+- 音效、Lottie、许可证清单打进安装包。没有逐条许可的素材就改用本地 CSS/Motion，不访问 CDN。
+- 未签名安装包可能被 SmartScreen 或企业白名单拦截。这是发布条件，不能靠改业务规则绕过。
+
+## 交付顺序
+
+先完成可持久化的比赛闭环和状态机测试，再接动画和音效。动效失败不得回滚已提交事务，也不得重复播放同一个 `eventId`。
