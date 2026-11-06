@@ -11,7 +11,7 @@ export const DEFAULT_TEAM_COUNT = 4
 export const DEFAULT_ROUND_COUNT = 1
 export const FIXED_ROUND_COUNT = 1
 export const TURN_SKIP_LIMIT = 5
-export const DEFAULT_TURN_DURATION_SEC = 60
+export const DEFAULT_TURN_DURATION_SEC = 120
 
 export function clampTurnDurationSec(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_TURN_DURATION_SEC

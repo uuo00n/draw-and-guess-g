@@ -6,6 +6,7 @@ import { normalizeMemberName } from '../../shared/normalize'
 import {
   groupDisplayName,
   sortGroupsByMemberCountDesc,
+  playOrderName,
   validateTeamRoster,
   type TeamRoster,
   RosterValidationError
@@ -75,14 +76,15 @@ export function resolveTeamsForGame(
   const paletteIndexByGroup = new Map(sorted.map((group, index) => [group.group, index]))
   const teams: ResolvedTeam[] = []
   filtered.forEach((group, index) => {
+    const playOrder = index + 1
     const paletteIndex = paletteIndexByGroup.get(group.group) ?? index
     const members = group.members.map((name, sortOrder) => ({
       name: normalizeMemberName(name),
       sortOrder
     }))
     teams.push({
-      groupNo: group.group,
-      name: groupDisplayName(group.group),
+      groupNo: playOrder,
+      name: playOrderName(playOrder),
       color: TEAM_PALETTE[paletteIndex % TEAM_PALETTE.length],
       sortOrder: index,
       members

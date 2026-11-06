@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { TeamRoster } from '@shared/schemas/roster'
-import { formatGroupRange, groupDisplayName, sortGroupsByMemberCountDesc } from '@shared/schemas/roster'
+import { playOrderName, sortGroupsByMemberCountDesc } from '@shared/schemas/roster'
 import { TEAM_PALETTE } from '@shared/constants'
 import { Button } from '@renderer/components/ui/button'
 import { Card, CardDescription, CardTitle } from '@renderer/components/ui/card'
@@ -25,11 +25,11 @@ export function RosterPanels({
       <div>
         <CardTitle>人员分组</CardTitle>
         <CardDescription className="mt-2">
-          共 {roster.total} 人 · {roster.groupCount} 组 · 按人数从多到少排列
+          共 {roster.total} 人 · {roster.groupCount} 组 · 按人数从多到少排列，组名依次为第 1 组起
         </CardDescription>
       </div>
       <div className="space-y-3">
-        {sorted.map((group) => {
+        {sorted.map((group, index) => {
           const paletteIndex = roster.groups.findIndex((item) => item.group === group.group)
           const color = TEAM_PALETTE[paletteIndex % TEAM_PALETTE.length]
           return (
@@ -39,7 +39,7 @@ export function RosterPanels({
               style={{ boxShadow: `inset 3px 0 0 ${color}` }}
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="font-semibold text-morning">{groupDisplayName(group.group)}</p>
+                <p className="font-semibold text-morning">{playOrderName(index + 1)}</p>
                 <span className="text-xs text-first-03">{group.members.length} 人</span>
               </div>
               <div className="mt-2 flex flex-wrap gap-2">
@@ -65,13 +65,13 @@ export function RosterPanels({
 
   return (
     <div className={cn('grid gap-6 xl:grid-cols-2', className)}>
-      <GameRulesCard roster={roster} />
+      <GameRulesCard />
       {membersCard}
     </div>
   )
 }
 
-function GameRulesCard({ roster }: { roster: TeamRoster }): React.JSX.Element {
+function GameRulesCard(): React.JSX.Element {
   const rules = useGameRulesStore((state) => state.rules)
   const setRules = useGameRulesStore((state) => state.setRules)
   const resetRules = useGameRulesStore((state) => state.resetRules)
@@ -85,9 +85,6 @@ function GameRulesCard({ roster }: { roster: TeamRoster }): React.JSX.Element {
     <Card className="space-y-4">
       <div>
         <CardTitle>游戏规则</CardTitle>
-        <CardDescription className="mt-2 text-lg text-white">
-          出场顺序为 {formatGroupRange(roster)}。默认 60 秒说明以创建比赛时冻结的时长为准。
-        </CardDescription>
       </div>
       <label className="block space-y-2">
         <span className="text-sm text-white">可直接编辑，每行一条规则</span>

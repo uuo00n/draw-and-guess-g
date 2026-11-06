@@ -29,6 +29,6 @@ describe('turn duration bounds', () => {
   it('commits an unfinished 3 as the 30 second minimum', () => {
     expect(clampTurnDurationSec(3)).toBe(30)
     expect(clampTurnDurationSec(30)).toBe(30)
-    expect(clampTurnDurationSec(Number.NaN)).toBe(60)
+    expect(clampTurnDurationSec(Number.NaN)).toBe(120)
   })
 })

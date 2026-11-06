@@ -1,9 +1,9 @@
 import type { TeamRoster } from '../schemas/roster'
 
-/** 内置默认分组（36 人 · 8 组） */
+/** 内置默认分组（32 人 · 7 组） */
 export const DEFAULT_ROSTER: TeamRoster = {
-  total: 36,
-  groupCount: 8,
+  total: 32,
+  groupCount: 7,
   groups: [
     { group: 1, members: ['王强', '孙先纯', '李俊达', '杜德浩', '李爽'] },
     { group: 2, members: ['田静', '董楠', '刘梓狄', '卜天佐'] },
@@ -11,7 +11,6 @@ export const DEFAULT_ROSTER: TeamRoster = {
     { group: 4, members: ['黄俊博', '蔡华', '周骏', '王佳琪'] },
     { group: 5, members: ['曲日鑫', '郎鹏举', '金婧', '姚子琦', '陈金华'] },
     { group: 6, members: ['傅文涛', '黄静', '贾巍', '刘维峰'] },
-    { group: 7, members: ['马传开', '张晟瑜', '王蒿', '刘同霞', '刘争艳'] },
-    { group: 8, members: ['谭明', '李明', '孙茂军', '马振'] }
+    { group: 7, members: ['马传开', '张晟瑜', '王蒿', '刘同霞', '刘争艳'] }
   ]
 }

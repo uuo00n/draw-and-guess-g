@@ -83,7 +83,7 @@ describe('createGame', () => {
     )
     expect(snapshot.teams).toHaveLength(2)
     expect(snapshot.plannedTurnCount).toBe(2)
-    expect(snapshot.teams.map((team) => team.name)).toEqual(['第 1 组', '第 3 组'])
+    expect(snapshot.teams.map((team) => team.name)).toEqual(['第 1 组', '第 2 组'])
   })
 
   it('freezes a 30 second challenge', () => {

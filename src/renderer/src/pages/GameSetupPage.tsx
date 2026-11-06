@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { GameSnapshot } from '@shared/schemas/games'
 import type { TeamRoster } from '@shared/schemas/roster'
-import { groupDisplayName, sortGroupsByMemberCountDesc } from '@shared/schemas/roster'
+import { playOrderName, sortGroupsByMemberCountDesc } from '@shared/schemas/roster'
 import type { QuestionBankSummary } from '@shared/schemas/questions'
 import {
   clampTurnDurationSec,
@@ -207,7 +207,7 @@ export function GameSetupPage(): React.JSX.Element {
     const set = new Set(participatingGroups)
     return sortGroupsByMemberCountDesc(roster.groups.filter((group) => set.has(group.group)))
       .slice(0, 3)
-      .map((group) => groupDisplayName(group.group))
+      .map((_, index) => playOrderName(index + 1))
       .join(' → ')
   }, [roster, participatingGroups])
 
@@ -281,7 +281,7 @@ export function GameSetupPage(): React.JSX.Element {
           <Card className="space-y-3 p-4">
             <CardTitle>人员名单</CardTitle>
             <p className="text-sm text-first-03">
-              组名、出场顺序和颜色在创建时冻结，不能在这里修改。出场顺序按人数从多到少，不会写回分组 JSON。
+              组名、出场顺序和颜色在创建时冻结，不能在这里修改。先按人数从多到少排序，再依次称为第 1 组、第 2 组……不会写回分组 JSON。
             </p>
           </Card>
           {roster ? (
@@ -336,7 +336,7 @@ export function GameSetupPage(): React.JSX.Element {
                 默认不选组；勾选后这些组才进入本场挑战顺序，未勾选的组本场不排队。可分批创建多场比赛。
               </p>
               <div className="flex flex-wrap gap-2">
-                {[...sortGroupsByMemberCountDesc(roster.groups)].map((group) => {
+                {[...sortGroupsByMemberCountDesc(roster.groups)].map((group, index) => {
                     const checked = participatingGroups.includes(group.group)
                     return (
                       <label
@@ -349,7 +349,7 @@ export function GameSetupPage(): React.JSX.Element {
                           checked={checked}
                           onChange={() => store.toggleParticipatingGroup(group.group)}
                         />
-                        {groupDisplayName(group.group)}
+                        {playOrderName(index + 1)}
                       </label>
                     )
                   })}
@@ -400,16 +400,16 @@ export function GameSetupPage(): React.JSX.Element {
           <DialogHeader>
             <DialogTitle>确认创建比赛</DialogTitle>
             <DialogDescription>
-              本批 {participatingCount} 场挑战，每场 {store.turnDurationSec} 秒。出场顺序按人数从多到少，冻结后不可改队列。
+              本批 {participatingCount} 场挑战，每场 {store.turnDurationSec} 秒。按人数排序后依次称为第 1 组起，冻结后不可改队列。
             </DialogDescription>
           </DialogHeader>
           <ul className="max-h-64 space-y-2 overflow-y-auto rounded-[12px] border border-line bg-surface p-3 text-sm">
             {roster
               ? sortGroupsByMemberCountDesc(
                   roster.groups.filter((group) => participatingGroups.includes(group.group))
-                ).map((group) => (
+                ).map((group, index) => (
                   <li key={group.group} className="text-first-03">
-                    {groupDisplayName(group.group)} · {group.members.length} 人
+                    {playOrderName(index + 1)} · {group.members.length} 人
                   </li>
                 ))
               : null}
