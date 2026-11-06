@@ -2,7 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { GameSnapshot } from '@shared/schemas/games'
 import type { TeamRoster } from '@shared/schemas/roster'
-import { playOrderName, sortGroupsByMemberCountDesc } from '@shared/schemas/roster'
+import {
+  globalPlayOrderByGroupNo,
+  participatingGroupsSorted,
+  playOrderName,
+  sortGroupsByMemberCountDesc
+} from '@shared/schemas/roster'
 import { pickPreferredQuestionBankId } from '@shared/question-bank-defaults'
 import type { QuestionBankSummary } from '@shared/schemas/questions'
 import {
@@ -205,14 +210,23 @@ export function GameSetupPage(): React.JSX.Element {
   const participatingCount = participatingGroups.length
   const challengeCount = participatingCount
 
-  const schedulePreview = useMemo(() => {
-    if (!roster || participatingGroups.length === 0) return ''
-    const set = new Set(participatingGroups)
-    return sortGroupsByMemberCountDesc(roster.groups.filter((group) => set.has(group.group)))
-      .slice(0, 3)
-      .map((_, index) => playOrderName(index + 1))
-      .join(' → ')
+  const globalPlayOrder = useMemo(
+    () => (roster ? globalPlayOrderByGroupNo(roster) : null),
+    [roster]
+  )
+
+  const orderedParticipating = useMemo(() => {
+    if (!roster || participatingGroups.length === 0) return []
+    return participatingGroupsSorted(roster, participatingGroups)
   }, [roster, participatingGroups])
+
+  const schedulePreview = useMemo(() => {
+    if (!globalPlayOrder || orderedParticipating.length === 0) return ''
+    return orderedParticipating
+      .slice(0, 3)
+      .map((group) => playOrderName(globalPlayOrder.get(group.group) ?? group.group))
+      .join(' → ')
+  }, [globalPlayOrder, orderedParticipating])
 
   const validateBeforeConfirm = (): string | null => {
     if (!store.bankId) return '请选择题库'
@@ -403,16 +417,16 @@ export function GameSetupPage(): React.JSX.Element {
           <DialogHeader>
             <DialogTitle>确认创建比赛</DialogTitle>
             <DialogDescription>
-              本批 {participatingCount} 场挑战，每场 {store.turnDurationSec} 秒。按人数排序后依次称为第 1 组起，冻结后不可改队列。
+              本批 {participatingCount} 场挑战，每场 {store.turnDurationSec} 秒。名单顺序与左侧一致；创建后本批内再依次编号为第
+              1 组起，冻结后不可改队列。
             </DialogDescription>
           </DialogHeader>
           <ul className="max-h-64 space-y-2 overflow-y-auto rounded-[12px] border border-line bg-surface p-3 text-sm">
-            {roster
-              ? sortGroupsByMemberCountDesc(
-                  roster.groups.filter((group) => participatingGroups.includes(group.group))
-                ).map((group, index) => (
+            {globalPlayOrder
+              ? orderedParticipating.map((group) => (
                   <li key={group.group} className="text-first-03">
-                    {playOrderName(index + 1)} · {group.members.length} 人
+                    {playOrderName(globalPlayOrder.get(group.group) ?? group.group)} ·{' '}
+                    {group.members.length} 人
                   </li>
                 ))
               : null}

@@ -84,6 +84,20 @@ export function playOrderName(playOrder: number): string {
   return groupDisplayName(playOrder)
 }
 
+/** 全名单按人数排序后，JSON group → 左侧/勾选区使用的出场序号（1 起） */
+export function globalPlayOrderByGroupNo(roster: TeamRoster): Map<number, number> {
+  const sorted = sortGroupsByMemberCountDesc(roster.groups)
+  return new Map(sorted.map((group, index) => [group.group, index + 1]))
+}
+
+export function participatingGroupsSorted(
+  roster: TeamRoster,
+  participatingGroupNumbers: number[]
+): Array<{ group: number; members: string[] }> {
+  const set = new Set(participatingGroupNumbers)
+  return sortGroupsByMemberCountDesc(roster.groups.filter((group) => set.has(group.group)))
+}
+
 export function formatPlayOrderRange(teamCount: number): string {
   if (teamCount <= 0) return ''
   if (teamCount === 1) return playOrderName(1)
