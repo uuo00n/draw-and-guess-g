@@ -2,7 +2,7 @@ import { dirname, join } from 'node:path'
 import { mkdirSync, readFileSync } from 'node:fs'
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { z } from 'zod'
-import { APP_DISPLAY_NAME } from '../../shared/constants'
+import { APP_DISPLAY_NAME, BUNDLED_QUESTION_BANK_FILE, IMPORT_MAX_BYTES } from '../../shared/constants'
 import type { AppDatabase } from '../database/connection'
 import { createGameInputSchema } from '../../shared/schemas/games'
 import { teamRosterSchema, validateTeamRoster } from '../../shared/schemas/roster'
@@ -32,10 +32,8 @@ import {
   undoLastAnswer
 } from '../domain/game-engine'
 import { timerEngine } from '../domain/timer-engine'
-import {
-  buildTemplateWorkbook,
-  exportBankWorkbook
-} from '../services/excel-service'
+import { readBundledQuestionBankBuffer } from '../services/bundled-question-bank'
+import { exportBankWorkbook } from '../services/excel-service'
 import {
   commitImportRows,
   countActiveQuestions,
@@ -45,7 +43,6 @@ import {
   listQuestions,
   parseImportFile
 } from '../services/question-service'
-import { IMPORT_MAX_BYTES } from '../../shared/constants'
 import { loadCurrentRoster, saveCurrentRoster, RosterValidationError } from '../services/roster-service'
 import { purgeAllGames, resetUsedQuestions } from '../services/game-purge'
 
@@ -81,9 +78,9 @@ export function registerQuestionHandlers(db: AppDatabase): void {
   })
 
   ipcMain.handle('questions:exportTemplate', async () => {
-    const buffer = await buildTemplateWorkbook()
+    const buffer = readBundledQuestionBankBuffer()
     const save = await dialog.showSaveDialog({
-      defaultPath: `${APP_DISPLAY_NAME}-题库模板.xlsx`,
+      defaultPath: BUNDLED_QUESTION_BANK_FILE,
       filters: [{ name: 'Excel', extensions: ['xlsx'] }]
     })
     if (save.canceled || !save.filePath) return { saved: false }

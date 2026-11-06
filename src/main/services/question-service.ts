@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { IMPORT_MAX_ROWS } from '../../shared/constants'
 import { normalizeQuestionText } from '../../shared/normalize'
+import { BUNDLED_QUESTION_BANK_NAME } from '../../shared/question-bank-defaults'
 import type { ImportResult, QuestionPage, QuestionQuery } from '../../shared/schemas/questions'
 import type { ParsedImportRow } from '../services/excel-service'
 import { parseCsvText, stripUtf8Bom } from '../services/csv-service'
@@ -158,9 +159,9 @@ export function listBanks(db: Database.Database) {
        LEFT JOIN questions q ON q.id = bq.question_id
        WHERE b.active = 1
        GROUP BY b.id
-       ORDER BY b.imported_at DESC`
+       ORDER BY CASE WHEN b.name = @officialName THEN 0 ELSE 1 END, b.imported_at DESC`
     )
-    .all()
+    .all({ officialName: BUNDLED_QUESTION_BANK_NAME })
     .map((row) => ({
       id: String((row as { id: string }).id),
       name: String((row as { name: string }).name),
@@ -257,8 +258,29 @@ export function listQuestions(db: Database.Database, query: QuestionQuery): Ques
 
 export function countActiveQuestions(db: Database.Database): number {
   return (
-    db.prepare('SELECT COUNT(*) AS c FROM questions WHERE active = 1').get() as { c: number }
+    db
+      .prepare(
+        `SELECT COUNT(DISTINCT q.id) AS c
+         FROM questions q
+         INNER JOIN bank_questions bq ON bq.question_id = q.id
+         INNER JOIN question_banks b ON b.id = bq.bank_id AND b.active = 1
+         WHERE q.active = 1`
+      )
+      .get() as { c: number }
   ).c
+}
+
+/** 清理已不在任何题库、且未出现在历史比赛队列里的题目行。 */
+export function purgeUnlinkedQuestions(db: Database.Database): number {
+  return db
+    .prepare(
+      `DELETE FROM questions
+       WHERE NOT EXISTS (SELECT 1 FROM bank_questions bq WHERE bq.question_id = questions.id)
+         AND NOT EXISTS (
+           SELECT 1 FROM game_question_queue gqq WHERE gqq.question_id = questions.id
+         )`
+    )
+    .run().changes
 }
 
 export function getBankExportRows(

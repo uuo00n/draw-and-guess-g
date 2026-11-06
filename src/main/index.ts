@@ -197,6 +197,8 @@ function startApplication(): void {
     } = await import('./ipc/register-handlers')
     const initPaths = initDatabasePath()
     db = openDatabase(initPaths.dbPath)
+    const { ensureBundledQuestionBank } = await import('./services/bundled-question-bank')
+    await ensureBundledQuestionBank(db)
     recoverDatabase(db, timerEngine)
     registerQuestionHandlers(db)
     registerGameHandlers(db, { dataDir: initPaths.dataDir })

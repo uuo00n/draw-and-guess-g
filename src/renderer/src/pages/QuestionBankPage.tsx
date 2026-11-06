@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { pickPreferredQuestionBankId } from '@shared/question-bank-defaults'
 import type { ImportResult, QuestionBankSummary, QuestionPage } from '@shared/schemas/questions'
 import { PageShell, StatPill } from '@renderer/components/layout/AppShell'
 import { Button } from '@renderer/components/ui/button'
@@ -21,8 +22,13 @@ export function QuestionBankPage(): React.JSX.Element {
   const refreshBanks = useCallback(async () => {
     const list = await window.gameAPI.questions.listBanks()
     setBanks(list)
-    if (!selectedBankId && list[0]) {
-      setSelectedBankId(list[0].id)
+    const preferredId = pickPreferredQuestionBankId(list)
+    if (!preferredId) {
+      setSelectedBankId(undefined)
+      return
+    }
+    if (!selectedBankId || !list.some((bank) => bank.id === selectedBankId)) {
+      setSelectedBankId(preferredId)
     }
   }, [selectedBankId])
 

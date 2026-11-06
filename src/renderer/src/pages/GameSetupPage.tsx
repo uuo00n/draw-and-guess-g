@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import type { GameSnapshot } from '@shared/schemas/games'
 import type { TeamRoster } from '@shared/schemas/roster'
 import { playOrderName, sortGroupsByMemberCountDesc } from '@shared/schemas/roster'
+import { pickPreferredQuestionBankId } from '@shared/question-bank-defaults'
 import type { QuestionBankSummary } from '@shared/schemas/questions'
 import {
   clampTurnDurationSec,
@@ -121,8 +122,10 @@ export function GameSetupPage(): React.JSX.Element {
     void window.gameAPI.questions.listBanks().then((list) => {
       setBanks(list)
       const currentBankId = useGameSetupStore.getState().bankId
-      if (!currentBankId && list[0]) {
-        useGameSetupStore.getState().setBankId(list[0].id)
+      const preferredId = pickPreferredQuestionBankId(list)
+      if (!preferredId) return
+      if (!currentBankId || !list.some((bank) => bank.id === currentBankId)) {
+        useGameSetupStore.getState().setBankId(preferredId)
       }
     })
     void window.gameAPI.app.getRoster().then(setRoster).catch(() => setRoster(null))
